@@ -1,3 +1,5 @@
+# ai
+
 from typing import Optional, List, Dict, Any
 
 from pydantic import BaseModel, Field, field_validator
@@ -51,17 +53,6 @@ class ChatResponse(BaseModel):
     input_sanitization: SanitizationInfo
     output_sanitization: SanitizationInfo
     usage: UsageInfo
-
-
-class HealthResponse(BaseModel):
-    status: str
-    service: str
-    chroma_db_dir: str
-    chat_history_db: str
-
-
-class GraphResponse(BaseModel):
-    mermaid: str
 
 
 class ErrorResponse(BaseModel):

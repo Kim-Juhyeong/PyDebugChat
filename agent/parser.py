@@ -4,7 +4,7 @@ from pydantic import BaseModel, Field
 from langchain_core.output_parsers import PydanticOutputParser
 
 
-# Reference Schema
+# 레퍼런스 스키마
 class Reference(BaseModel):
     """
     답변에 사용한 참고 근거 정보
@@ -31,7 +31,7 @@ class Reference(BaseModel):
         description="참고 출처 유형"
     )
 
-# Final Answer Schema
+# 최종 답변 스키마
 class DebuggingAnswer(BaseModel):
     """
     Python Debug Assistant의 최종 답변 구조
@@ -54,7 +54,7 @@ class DebuggingAnswer(BaseModel):
 
     cause: Optional[str] = Field(
         default="",
-        description="에러나 문제가 발생한 원인. 일반 대화면 비워도 됨"
+        description="에러나 문제가 발생한 원인. 일반 대화면 비워도 된다."
     )
 
     solution_steps: List[str] = Field(
@@ -92,7 +92,6 @@ class DebuggingAnswer(BaseModel):
         description="개인정보 마스킹, 보안상 주의사항 등이 있으면 작성"
     )
 
-# Parser
 debugging_answer_parser = PydanticOutputParser(
     pydantic_object=DebuggingAnswer
 )

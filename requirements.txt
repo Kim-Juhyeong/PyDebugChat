@@ -1,6 +1,11 @@
 fastapi
-uvicorn
+uvicorn[standard]
 pydantic
+python-dotenv
+
+requests
+beautifulsoup4
+
 langchain
 langchain-core
 langchain-community
@@ -8,10 +13,10 @@ langchain-openai
 langchain-chroma
 langchain-text-splitters
 langchain-tavily
+
 langgraph
 langgraph-checkpoint-sqlite
-starlette
-python-dotenv
-requests
-beautifulsoup4
+aiosqlite
+
 chromadb
+starlette

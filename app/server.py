@@ -1,3 +1,5 @@
+# ai
+
 import os
 import time
 import uuid
@@ -171,17 +173,6 @@ async def health():
         chroma_db_dir=CHROMA_DB_DIR,
         chat_history_db=CHAT_HISTORY_DB,
     )
-
-
-@app.get("/graph", response_model=GraphResponse)
-async def get_graph():
-    try:
-        mermaid = graph.get_graph().draw_mermaid()
-    except Exception as e:
-        mermaid = f"graph 출력 실패: {type(e).__name__}: {str(e)}"
-
-    return GraphResponse(mermaid=mermaid)
-
 
 @app.post("/chat", response_model=ChatResponse)
 async def chat(request: Request, payload: ChatRequest):

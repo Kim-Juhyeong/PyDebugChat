@@ -10,30 +10,28 @@ from langchain_openai import OpenAIEmbeddings
 
 load_dotenv()
 
-# 환경 변수
-CHROMA_DB_DIR = os.getenv("CHROMA_DB_DIR", "/mnt/data/chroma_db")
-COLLECTION_NAME = os.getenv("COLLECTION_NAME", "python_docs_collection")
+# 설정
+CHROMA_DB_DIR = "/mnt/data/chroma_db"
+COLLECTION_NAME = "python_docs_collection"
+EMBEDDING_MODEL = "text-embedding-3-small"
 
-ERROR_SCORE_THRESHOLD = float(os.getenv("ERROR_SCORE_THRESHOLD", "0.55"))
-MIN_ERROR_DOCS = int(os.getenv("MIN_ERROR_DOCS", "2"))
-
+ERROR_SCORE_THRESHOLD = "0.55"
+MIN_ERROR_DOCS = "2"
 
 # ChromaDB 설정
 embedding_model = OpenAIEmbeddings(
-    model=os.getenv("EMBEDDING_MODEL", "text-embedding-3-small")
+    model=EMBEDDING_MODEL
 )
 
+# ChromaDB 인스턴스 생성
 vectorstore = Chroma(
     persist_directory=CHROMA_DB_DIR,
     embedding_function=embedding_model,
     collection_name=COLLECTION_NAME,
 )
 
-
 # Tavily 설정
-_tavily = TavilySearch(max_results=3)
-
-
+_tavily_tool = TavilySearch(max_results=3)
 
 # 공통 함수
 def _format_doc(doc, index: int, score: float | None = None) -> str:
@@ -61,13 +59,11 @@ def _format_doc(doc, index: int, score: float | None = None) -> str:
 {content}
 """.strip()
 
-
+# 검색 오류 메시지 처리
 def _safe_search_error_message(e: Exception) -> str:
     return f"검색 중 오류가 발생했습니다: {type(e).__name__}: {str(e)}"
 
-
-
-# 1. Python 공식문서 RAG 검색
+# Tool 1. Python 공식문서 RAG 검색
 @tool
 def python_docs_search(query: str) -> str:
     """
@@ -143,8 +139,7 @@ def python_docs_search(query: str) -> str:
     except Exception as e:
         return f"[SEARCH_STATUS]: INSUFFICIENT\n{_safe_search_error_message(e)}"
 
-
-# 2. Python 에러 전용 RAG 검색
+# Tool 2. Python 에러 전용 RAG 검색
 @tool
 def python_error_search(query: str) -> str:
     """
@@ -209,6 +204,7 @@ def python_error_search(query: str) -> str:
     """
 
     try:
+        # k=8로 검색
         docs_with_scores = vectorstore.similarity_search_with_score(
             expanded_query,
             k=8,
@@ -223,6 +219,7 @@ def python_error_search(query: str) -> str:
             Python 공식 문서에서 관련 에러 정보를 찾지 못했습니다.
             """.strip()
 
+        # 관련도 기준을 통과한 문서 필터링
         filtered = [
             (doc, score)
             for doc, score in docs_with_scores
@@ -270,9 +267,7 @@ def python_error_search(query: str) -> str:
 {_safe_search_error_message(e)}
 """.strip()
 
-
-
-# 3. StackOverflow 검색
+# Tool 3. StackOverflow 검색
 @tool
 def stackoverflow_search(query: str) -> str:
     """
@@ -349,7 +344,7 @@ def stackoverflow_search(query: str) -> str:
             link = item.get("link", "")
             score = item.get("score", 0)
             answer_count = item.get("answer_count", 0)
-            is_answered = "✅ 해결됨" if item.get("is_answered") else "💬 답변 있음"
+            is_answered = "해결됨" if item.get("is_answered") else "답변 있음"
 
             result += f"{i}. {title} [{is_answered}]\n"
             result += f"   점수: {score}, 답변 수: {answer_count}\n"
@@ -374,11 +369,7 @@ def stackoverflow_search(query: str) -> str:
     except Exception as e:
         return f"Stack Overflow 검색 중 알 수 없는 오류 발생: {str(e)}"
 
-
-
-# 4. 일반 웹 검색
-
-
+# Tool 4. 일반 웹 검색
 @tool
 def web_search(query: str) -> str:
     """
@@ -413,15 +404,11 @@ def web_search(query: str) -> str:
         Tavily 웹 검색 결과
     """
     try:
-        return str(_tavily.invoke({"query": query}))
+        return str(_tavily_tool.invoke({"query": query}))
     except Exception as e:
-        return f"웹 검색 중 오류가 발생했습니다: {type(e).__name__}: {str(e)}"
-
-
+        return f"웹 {_safe_search_error_message(e)}"
 
 # Agent Tool 목록
-
-
 tools = [
     python_docs_search,
     python_error_search,
