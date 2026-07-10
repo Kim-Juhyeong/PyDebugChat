@@ -1,0 +1,17 @@
+fastapi
+uvicorn
+pydantic
+langchain
+langchain-core
+langchain-community
+langchain-openai
+langchain-chroma
+langchain-text-splitters
+langchain-tavily
+langgraph
+langgraph-checkpoint-sqlite
+starlette
+python-dotenv
+requests
+beautifulsoup4
+chromadb

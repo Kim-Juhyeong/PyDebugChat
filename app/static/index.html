@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1.0" />
+  <title>Python Debug Assistant</title>
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+
+<body>
+  <div class="app-shell">
+
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-icon">🐍</div>
+        <div>
+          <h1>Python Debug Assistant</h1>
+          <p>LangGraph · RAG · OCI</p>
+        </div>
+      </div>
+
+      <button class="new-chat-btn" id="new-chat-btn">＋ 새 채팅</button>
+
+      <div class="sidebar-section-title">채팅 목록</div>
+      <div class="chat-list" id="chat-list"></div>
+    </aside>
+
+    <main class="chat-main">
+      <header class="chat-header">
+        <div>
+          <h2 id="chat-title">새 채팅</h2>
+          <p id="chat-subtitle">Python 에러, 문법, 공식문서 검색을 도와드립니다.</p>
+        </div>
+
+        <div class="header-badges">
+          <span class="badge">ChromaDB RAG</span>
+          <span class="badge">LangGraph</span>
+          <span class="badge">Port 3000</span>
+        </div>
+      </header>
+
+      <section class="quick-panel">
+        <button class="quick-btn">TypeError: 'int' object is not iterable 원인 알려줘</button>
+        <button class="quick-btn">dataclass 사용법 알려줘</button>
+        <button class="quick-btn">ModuleNotFoundError 해결 방법 알려줘</button>
+        <button class="quick-btn">Python asyncio.gather 설명해줘</button>
+      </section>
+
+      <section class="messages" id="messages"></section>
+
+      <footer class="composer">
+        <textarea
+          id="message-input"
+          placeholder="Python 에러 로그나 질문을 입력하세요. Ctrl + Enter로 전송할 수 있습니다."
+        ></textarea>
+        <button id="send-btn">전송</button>
+      </footer>
+    </main>
+
+    <aside class="agent-panel" id="agent-panel">
+      <div class="agent-panel-head">
+        <div>
+          <h3>Agent 실행 과정</h3>
+          <p id="agent-status">대기 중</p>
+        </div>
+        <button id="clear-steps-btn">지우기</button>
+      </div>
+
+      <div class="steps" id="steps"></div>
+
+      <div class="usage-box" id="usage-box">
+        <div>Model Calls: <strong id="model-calls">0</strong></div>
+        <div>Tool Calls: <strong id="tool-calls">0</strong></div>
+        <div>Total: <strong id="total-calls">0</strong></div>
+      </div>
+    </aside>
+
+  </div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
