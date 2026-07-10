@@ -25,8 +25,6 @@ from agent.graph import graph
 from app.schemas import (
     ChatRequest,
     ChatResponse,
-    HealthResponse,
-    GraphResponse,
     SanitizationInfo,
     UsageInfo,
 )
@@ -164,15 +162,6 @@ async def index():
         """
     )
 
-
-@app.get("/health", response_model=HealthResponse)
-async def health():
-    return HealthResponse(
-        status="ok",
-        service=SERVICE_NAME,
-        chroma_db_dir=CHROMA_DB_DIR,
-        chat_history_db=CHAT_HISTORY_DB,
-    )
 
 @app.post("/chat", response_model=ChatResponse)
 async def chat(request: Request, payload: ChatRequest):

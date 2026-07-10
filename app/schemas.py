@@ -1,5 +1,3 @@
-# ai
-
 from typing import Optional, List, Dict, Any
 
 from pydantic import BaseModel, Field, field_validator
@@ -32,8 +30,8 @@ class ChatRequest(BaseModel):
 class SanitizationInfo(BaseModel):
     masked: bool = False
     pii_detected: bool = False
-    pii_types: List[str] = []
-    pii_counts: Dict[str, int] = {}
+    pii_types: List[str] = Field(default_factory=list)
+    pii_counts: Dict[str, int] = Field(default_factory=dict)
     profanity_detected: bool = False
     profanity_count: int = 0
 
