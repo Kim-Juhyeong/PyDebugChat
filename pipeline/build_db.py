@@ -16,19 +16,19 @@ load_dotenv()
 # 설정
 
 # 저장 디렉토리
-RAW_DATA_DIR = "/mnt/data/raw_docs"
-CHROMA_DB_DIR = "/mnt/data/chroma_db"
-PROCESSED_DATA_DIR = "/mnt/data/processed_docs"
+RAW_DATA_DIR = Path("/mnt/data/raw_docs")
+CHROMA_DB_DIR = Path("/mnt/data/chroma_db")
+PROCESSED_DATA_DIR = Path("/mnt/data/processed_docs")
 # 컬렉션 이름
 COLLECTION_NAME = "python_docs_collection"
 # 임베딩 모델 및 배치 사이즈
 EMBEDDING_MODEL = "text-embedding-3-small"
-BATCH_SIZE = "64"
+BATCH_SIZE = 64
 # 청크 분할 설정
-CHUNK_SIZE = "1000"
-CHUNK_OVERLAP = "200"
+CHUNK_SIZE = 1000
+CHUNK_OVERLAP = 200
 # true면 기존 ChromaDB 삭제 후 재생성
-RESET_CHROMA_DB = "true"
+RESET_CHROMA_DB = True
 
 
 
