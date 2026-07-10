@@ -84,7 +84,7 @@ def get_page(url):
         return None
 
     # 요청 속도 제한
-    time.sleep(random.uniform(0.5, 1.0))
+    time.sleep(random.uniform(0.1, 0.5))
 
     response = session.get(url, timeout=20)
     response.raise_for_status()

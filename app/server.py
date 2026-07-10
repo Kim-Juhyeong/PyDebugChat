@@ -42,15 +42,15 @@ load_dotenv()
 
 
 # 환경 변수
-SERVICE_NAME = os.getenv("SERVICE_NAME", "Python Debug Assistant")
+SERVICE_NAME = "Python Debug Assistant"
 
-CHROMA_DB_DIR = os.getenv("CHROMA_DB_DIR", "/mnt/data/chroma_db")
-CHAT_HISTORY_DB = os.getenv("CHAT_HISTORY_DB", "/mnt/data/chat_history.db")
+CHROMA_DB_DIR = "/mnt/data/chroma_db"
+CHAT_HISTORY_DB = "/mnt/data/chat_history.db"
 
-MAX_MODEL_CALLS = int(os.getenv("MAX_MODEL_CALLS", "3"))
-MAX_TOOL_CALLS = int(os.getenv("MAX_TOOL_CALLS", "5"))
-MAX_TOTAL_CALLS = int(os.getenv("MAX_TOTAL_CALLS", "8"))
-MAX_GRAPH_STEPS = int(os.getenv("MAX_GRAPH_STEPS", "12"))
+MAX_MODEL_CALLS = "3"
+MAX_TOOL_CALLS = "5"
+MAX_TOTAL_CALLS = "8"
+MAX_GRAPH_STEPS = "12"
 
 BASE_DIR = Path(__file__).resolve().parent
 STATIC_DIR = BASE_DIR / "static"
@@ -185,9 +185,9 @@ async def chat(request: Request, payload: ChatRequest):
     )
 
     limiter = CallLimitCallbackHandler(
-        max_model_calls=MAX_MODEL_CALLS,
-        max_tool_calls=MAX_TOOL_CALLS,
-        max_total_calls=MAX_TOTAL_CALLS,
+        max_model_calls=int(MAX_MODEL_CALLS),
+        max_tool_calls=int(MAX_TOOL_CALLS),
+        max_total_calls=int(MAX_TOTAL_CALLS),
     )
 
     try:
@@ -204,7 +204,7 @@ async def chat(request: Request, payload: ChatRequest):
                 "callbacks": [
                     limiter,
                 ],
-                "recursion_limit": MAX_GRAPH_STEPS,
+                "recursion_limit": int(MAX_GRAPH_STEPS),
             },
         )
 
@@ -234,7 +234,7 @@ async def chat(request: Request, payload: ChatRequest):
                 model_calls=counts["model_calls"],
                 tool_calls=counts["tool_calls"],
                 total_calls=counts["total_calls"],
-                graph_recursion_limit=MAX_GRAPH_STEPS,
+                graph_recursion_limit=int(MAX_GRAPH_STEPS),
                 elapsed_ms=elapsed_ms,
             ),
         )
@@ -319,9 +319,9 @@ async def agent_stream(
 
     async def event_generator():
         limiter = CallLimitCallbackHandler(
-            max_model_calls=MAX_MODEL_CALLS,
-            max_tool_calls=MAX_TOOL_CALLS,
-            max_total_calls=MAX_TOTAL_CALLS,
+            max_model_calls=int(MAX_MODEL_CALLS),
+            max_tool_calls=int(MAX_TOOL_CALLS),
+            max_total_calls=int(MAX_TOTAL_CALLS),
         )
 
         try:
@@ -356,7 +356,7 @@ async def agent_stream(
                     "callbacks": [
                         limiter,
                     ],
-                    "recursion_limit": MAX_GRAPH_STEPS,
+                    "recursion_limit": int(MAX_GRAPH_STEPS),
                 },
                 stream_mode="updates",
             ):
@@ -422,7 +422,7 @@ async def agent_stream(
                     "model_calls": counts["model_calls"],
                     "tool_calls": counts["tool_calls"],
                     "total_calls": counts["total_calls"],
-                    "graph_recursion_limit": MAX_GRAPH_STEPS,
+                    "graph_recursion_limit": int(MAX_GRAPH_STEPS),
                 },
                 "answer": final_answer,
             })
