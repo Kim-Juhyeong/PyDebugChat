@@ -1,17 +1,17 @@
 import os
-import sqlite3
+import aiosqlite
 
 from typing import Annotated, TypedDict
 from langchain_openai import ChatOpenAI
-from langchain_core.messages import (SystemMessage, AIMessage, HumanMessage, ToolMessage)
+from langchain_core.messages import SystemMessage, AIMessage, HumanMessage, ToolMessage
 from langgraph.graph import StateGraph, START, END
 from langgraph.graph.message import add_messages
 from langgraph.prebuilt import ToolNode
-from langgraph.checkpoint.sqlite import SqliteSaver
+from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 
 # 모듈
 from agent.tools import tools, stackoverflow_search
-from agent.parser import (get_format_instructions, safe_parse_debugging_answer, render_debugging_answer)
+from agent.parser import get_format_instructions, safe_parse_debugging_answer, render_debugging_answer
 
 from dotenv import load_dotenv
 load_dotenv()
@@ -210,7 +210,7 @@ def _has_insufficient_python_error_result(state: State) -> bool:
     return False
 
 # Node
-def reasoning_node(state: State):
+async def reasoning_node(state: State):
     """
     LLM이 직접 답변할지 Tool을 호출할지 결정한다.
     """
@@ -218,31 +218,31 @@ def reasoning_node(state: State):
         SystemMessage(content=SYSTEM_PROMPT)
     ] + state["messages"]
 
-    response = tool_llm.invoke(messages)
+    response = await tool_llm.ainvoke(messages)
 
     return {
         "messages": [response]
     }
 
-def stackoverflow_fallback_node(state: State):
+async def stackoverflow_fallback_node(state: State):
     """
     python_error_search 결과가 부족할 때 StackOverflow를 자동 검색한다.
     """
     query = _get_last_python_error_query(state)
 
-    result = stackoverflow_search.invoke({
+    result = await stackoverflow_search.ainvoke({
         "query": query
     })
 
     content = f"""
-    [자동 보완 검색: StackOverflow]
-    python_error_search 결과가 충분하지 않아 StackOverflow 검색을 추가로 수행했습니다.
+[자동 보완 검색: StackOverflow]
+python_error_search 결과가 충분하지 않아 StackOverflow 검색을 추가로 수행했습니다.
 
-    검색어:
-    {query}
+검색어:
+{query}
 
-    검색 결과:
-    {result}
+검색 결과:
+{result}
 """.strip()
 
     return {
@@ -251,30 +251,30 @@ def stackoverflow_fallback_node(state: State):
         ]
     }
 
-def final_answer_node(state: State):
+async def final_answer_node(state: State):
     """
     Tool 결과를 참고해 최종 답변을 생성한다.
     OutputParser를 사용해 JSON 구조로 파싱한 뒤 Markdown으로 변환한다.
     """
 
     parser_instruction = f"""
-    아래 형식 지침을 반드시 따르세요.
-    
-    중요:
-    - 반드시 JSON만 출력하세요.
-    - Markdown을 직접 출력하지 마세요.
-    - 코드 블록도 JSON 문자열 안에 넣으세요.
-    - JSON 앞뒤에 설명 문장을 붙이지 마세요.
-    
-    {get_format_instructions()}
-    """
+아래 형식 지침을 반드시 따르세요.
+
+중요:
+- 반드시 JSON만 출력하세요.
+- Markdown을 직접 출력하지 마세요.
+- 코드 블록도 JSON 문자열 안에 넣으세요.
+- JSON 앞뒤에 설명 문장을 붙이지 마세요.
+
+{get_format_instructions()}
+"""
 
     messages = [
         SystemMessage(content=FINAL_PROMPT),
         SystemMessage(content=parser_instruction),
     ] + state["messages"]
 
-    response = llm.invoke(messages)
+    response = await llm.ainvoke(messages)
 
     raw_text = _content_to_text(response.content)
 
@@ -340,14 +340,32 @@ builder.add_conditional_edges(
 builder.add_edge("stackoverflow_fallback", "final_answer")
 builder.add_edge("final_answer", END)
 
-# SQLite Memory 설정
-conn = sqlite3.connect(
-    CHAT_HISTORY_DB,
-    check_same_thread=False,
-)
+# Async SQLite Memory 설정
 
-checkpointer = SqliteSaver(conn)
+_runtime_graph = None
+_async_conn = None
+_async_checkpointer = None
 
-graph = builder.compile(
-    checkpointer=checkpointer
-)
+
+async def get_graph():
+    """
+    FastAPI async 환경에서 사용할 LangGraph 인스턴스를 반환한다.
+    SSE에서 graph.astream()을 사용하므로 AsyncSqliteSaver가 필요하다.
+    """
+    global _runtime_graph, _async_conn, _async_checkpointer
+
+    if _runtime_graph is not None:
+        return _runtime_graph
+
+    os.makedirs(os.path.dirname(CHAT_HISTORY_DB), exist_ok=True)
+
+    _async_conn = await aiosqlite.connect(CHAT_HISTORY_DB)
+    _async_checkpointer = AsyncSqliteSaver(_async_conn)
+
+    await _async_checkpointer.setup()
+
+    _runtime_graph = builder.compile(
+        checkpointer=_async_checkpointer
+    )
+
+    return _runtime_graph

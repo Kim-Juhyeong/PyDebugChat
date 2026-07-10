@@ -8,6 +8,7 @@ import json
 from pathlib import Path
 from dotenv import load_dotenv
 
+from agent import graph
 from fastapi import FastAPI, Request, HTTPException, Query
 from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
@@ -21,20 +22,9 @@ except Exception:
     class GraphRecursionError(Exception):
         pass
 
-from agent.graph import graph
-from app.schemas import (
-    ChatRequest,
-    ChatResponse,
-    SanitizationInfo,
-    UsageInfo,
-)
-from app.middleware import (
-    ChatSafetyMiddleware,
-    CallLimitCallbackHandler,
-    CallLimitExceeded,
-    sanitize_text,
-    logger,
-)
+from agent.graph import get_graph
+from app.schemas import ChatRequest, ChatResponse, SanitizationInfo, UsageInfo
+from app.middleware import ChatSafetyMiddleware, CallLimitCallbackHandler, CallLimitExceeded, sanitize_text, logger
 
 load_dotenv()
 
@@ -180,7 +170,9 @@ async def chat(request: Request, payload: ChatRequest):
     )
 
     try:
-        result = graph.invoke(
+        runtime_graph = await get_graph()
+
+        result = await runtime_graph.ainvoke(
             {
                 "messages": [
                     HumanMessage(content=payload.message)
@@ -193,7 +185,7 @@ async def chat(request: Request, payload: ChatRequest):
                 "callbacks": [
                     limiter,
                 ],
-                "recursion_limit": int(MAX_GRAPH_STEPS),
+                "recursion_limit": MAX_GRAPH_STEPS,
             },
         )
 
@@ -332,7 +324,9 @@ async def agent_stream(
 
             final_answer = ""
 
-            async for update in graph.astream(
+            runtime_graph = await get_graph()
+
+            async for update in runtime_graph.astream(
                 {
                     "messages": [
                         HumanMessage(content=safe_question)
@@ -345,7 +339,7 @@ async def agent_stream(
                     "callbacks": [
                         limiter,
                     ],
-                    "recursion_limit": int(MAX_GRAPH_STEPS),
+                    "recursion_limit": MAX_GRAPH_STEPS,
                 },
                 stream_mode="updates",
             ):
