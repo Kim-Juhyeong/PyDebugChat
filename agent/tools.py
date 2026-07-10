@@ -1,3 +1,4 @@
+from importlib.resources import path
 import os
 import html
 import requests
@@ -11,12 +12,13 @@ from langchain_openai import OpenAIEmbeddings
 load_dotenv()
 
 # 설정
-CHROMA_DB_DIR = "/mnt/data/chroma_db"
+CHROMA_DB_DIR = path("/mnt/data/chroma_db")
+
 COLLECTION_NAME = "python_docs_collection"
 EMBEDDING_MODEL = "text-embedding-3-small"
 
-ERROR_SCORE_THRESHOLD = "0.55"
-MIN_ERROR_DOCS = "2"
+ERROR_SCORE_THRESHOLD = 0.55
+MIN_ERROR_DOCS = 2
 
 # ChromaDB 설정
 embedding_model = OpenAIEmbeddings(

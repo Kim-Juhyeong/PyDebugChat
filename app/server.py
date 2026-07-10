@@ -1,5 +1,6 @@
 # ai
 
+from importlib.resources import path
 import os
 import time
 import uuid
@@ -32,13 +33,13 @@ load_dotenv()
 # 환경 변수
 SERVICE_NAME = "Python Debug Assistant"
 
-CHROMA_DB_DIR = "/mnt/data/chroma_db"
-CHAT_HISTORY_DB = "/mnt/data/chat_history.db"
+CHROMA_DB_DIR = path("/mnt/data/chroma_db")
+CHAT_HISTORY_DB = path("/mnt/data/chat_history.db")
 
-MAX_MODEL_CALLS = "3"
-MAX_TOOL_CALLS = "5"
-MAX_TOTAL_CALLS = "8"
-MAX_GRAPH_STEPS = "12"
+MAX_MODEL_CALLS = 3
+MAX_TOOL_CALLS = 5
+MAX_TOTAL_CALLS = 8
+MAX_GRAPH_STEPS = 12
 
 BASE_DIR = Path(__file__).resolve().parent
 STATIC_DIR = BASE_DIR / "static"
