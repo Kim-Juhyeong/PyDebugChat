@@ -1,4 +1,5 @@
 const STORAGE_KEY = "python-debug-assistant.sessions";
+const ACTIVE_SESSION_KEY = "python-debug-assistant.active-session";
 
 const TOOL_META = {
   python_docs_search: {
@@ -26,6 +27,7 @@ const TOOL_META = {
 let sessions = [];
 let currentSessionId = null;
 let currentEventSource = null;
+let activeRequest = null;
 
 const chatListEl = document.getElementById("chat-list");
 const messagesEl = document.getElementById("messages");
@@ -61,7 +63,25 @@ function createId() {
 
 function loadSessions() {
   try {
-    sessions = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
+    const stored = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
+    sessions = Array.isArray(stored)
+      ? stored
+          .filter((session) => session && typeof session.id === "string")
+          .map((session) => ({
+            id: session.id,
+            title: typeof session.title === "string" ? session.title : "이전 대화",
+            createdAt: session.createdAt || new Date().toISOString(),
+            updatedAt: session.updatedAt || session.createdAt || new Date().toISOString(),
+            messages: Array.isArray(session.messages)
+              ? session.messages.filter(
+                  (message) =>
+                    message &&
+                    ["user", "assistant"].includes(message.role) &&
+                    typeof message.content === "string",
+                )
+              : [],
+          }))
+      : [];
   } catch {
     sessions = [];
   }
@@ -69,7 +89,10 @@ function loadSessions() {
   if (sessions.length === 0) {
     createSession();
   } else {
-    currentSessionId = sessions[0].id;
+    const storedActiveId = localStorage.getItem(ACTIVE_SESSION_KEY);
+    currentSessionId = sessions.some((session) => session.id === storedActiveId)
+      ? storedActiveId
+      : sessions[0].id;
   }
 
   renderChatList();
@@ -77,11 +100,22 @@ function loadSessions() {
 }
 
 function saveSessions() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(sessions));
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(sessions));
+    if (currentSessionId) {
+      localStorage.setItem(ACTIVE_SESSION_KEY, currentSessionId);
+    }
+  } catch (error) {
+    console.warn("대화 기록을 브라우저에 저장하지 못했습니다.", error);
+  }
 }
 
 function getCurrentSession() {
   return sessions.find((s) => s.id === currentSessionId);
+}
+
+function getSession(sessionId) {
+  return sessions.find((session) => session.id === sessionId);
 }
 
 function createSession() {
@@ -105,7 +139,10 @@ function createSession() {
 }
 
 function selectSession(sessionId) {
+  if (!getSession(sessionId)) return;
+
   currentSessionId = sessionId;
+  saveSessions();
   renderChatList();
   renderMessages();
   clearSteps();
@@ -180,8 +217,8 @@ function renderMessages() {
   scrollMessagesToBottom();
 }
 
-function appendMessage(role, content) {
-  const session = getCurrentSession();
+function appendMessageToSession(sessionId, role, content) {
+  const session = getSession(sessionId);
   if (!session) return;
 
   session.messages.push({
@@ -199,16 +236,18 @@ function appendMessage(role, content) {
   saveSessions();
   renderChatList();
 
-  if (messagesEl.querySelector(".empty-state")) {
-    messagesEl.innerHTML = "";
-  }
+  if (sessionId === currentSessionId) {
+    if (messagesEl.querySelector(".empty-state")) {
+      messagesEl.innerHTML = "";
+    }
 
-  appendMessageToDOM(role, content);
-  scrollMessagesToBottom();
+    appendMessageToDOM(role, content);
+    scrollMessagesToBottom();
+  }
 }
 
-function replaceLastUserMessage(content) {
-  const session = getCurrentSession();
+function replaceLastUserMessage(sessionId, content) {
+  const session = getSession(sessionId);
   if (!session) return;
 
   for (let i = session.messages.length - 1; i >= 0; i--) {
@@ -219,7 +258,10 @@ function replaceLastUserMessage(content) {
   }
 
   saveSessions();
-  renderMessages();
+
+  if (sessionId === currentSessionId) {
+    renderMessages();
+  }
 }
 
 function appendMessageToDOM(role, content) {
@@ -252,16 +294,16 @@ function addStep(type, data) {
 
   if (type === "start") {
     div.innerHTML = `
-      <div class="step-label">🤖 AGENT START</div>
-      <div class="step-content">${escapeHtml(data.message || "Agent 시작")}</div>
+      <div class="step-label">분석 시작</div>
+      <div class="step-content">질문과 이전 대화를 확인하고 있습니다.</div>
     `;
   }
 
   if (type === "input_masked") {
     div.className = "step tool-result";
     div.innerHTML = `
-      <div class="step-label">🛡 INPUT MASKED</div>
-      <div class="step-content">개인정보 또는 욕설이 마스킹되었습니다.</div>
+      <div class="step-label">민감 정보 보호</div>
+      <div class="step-content">입력에 포함된 민감 정보를 가렸습니다.</div>
     `;
   }
 
@@ -269,32 +311,29 @@ function addStep(type, data) {
     const meta = TOOL_META[data.tool] || TOOL_META.unknown;
 
     div.innerHTML = `
-      <div class="step-label">${meta.icon} TOOL CALL → ${escapeHtml(data.tool)}</div>
-      <div class="step-args">${escapeHtml(JSON.stringify(data.args || {}, null, 2))}</div>
+      <div class="step-label">${meta.icon} ${meta.label}</div>
+      <div class="step-content">해결에 필요한 자료를 찾고 있습니다.</div>
     `;
   }
 
   if (type === "tool_result") {
     const meta = TOOL_META[data.tool] || TOOL_META.unknown;
-    const content = data.content || "";
-    const preview = content.length > 360 ? content.slice(0, 360) + "..." : content;
-
     div.innerHTML = `
-      <div class="step-label">✅ TOOL RESULT ← ${meta.label}</div>
-      <div class="step-content">${escapeHtml(preview)}</div>
+      <div class="step-label">${meta.icon} 자료 확인 완료</div>
+      <div class="step-content">${meta.label} 결과를 답변에 반영합니다.</div>
     `;
   }
 
   if (type === "answer") {
     div.innerHTML = `
-      <div class="step-label">💬 FINAL ANSWER</div>
-      <div class="step-content">최종 답변 생성 완료</div>
+      <div class="step-label">답변 작성 완료</div>
+      <div class="step-content">원인과 해결 방법을 정리했습니다.</div>
     `;
   }
 
   if (type === "error") {
     div.innerHTML = `
-      <div class="step-label">❌ ERROR</div>
+      <div class="step-label">처리 중단</div>
       <div class="step-content">${escapeHtml(data.message || "오류 발생")}</div>
     `;
   }
@@ -310,6 +349,27 @@ function setRunning(isRunning) {
   sendBtn.textContent = isRunning ? "실행 중" : "전송";
 }
 
+function finishRequest(requestState) {
+  if (!requestState || requestState.finished) return false;
+
+  requestState.finished = true;
+  requestState.source.close();
+
+  if (activeRequest === requestState) {
+    activeRequest = null;
+    currentEventSource = null;
+    setRunning(false);
+  }
+
+  return true;
+}
+
+function showRequestStep(requestState, type, data) {
+  if (requestState.sessionId === currentSessionId) {
+    addStep(type, data);
+  }
+}
+
 function sendMessage() {
   const message = inputEl.value.trim();
 
@@ -321,7 +381,9 @@ function sendMessage() {
     createSession();
   }
 
-  appendMessage("user", message);
+  const requestSessionId = currentSessionId;
+
+  appendMessageToSession(requestSessionId, "user", message);
   inputEl.value = "";
   clearSteps();
   setRunning(true);
@@ -330,79 +392,100 @@ function sendMessage() {
     currentEventSource.close();
   }
 
-  const url = `/api/agent/stream?session_id=${encodeURIComponent(currentSessionId)}&question=${encodeURIComponent(message)}`;
+  const url = `/api/agent/stream?session_id=${encodeURIComponent(requestSessionId)}&question=${encodeURIComponent(message)}`;
 
-  currentEventSource = new EventSource(url);
+  const source = new EventSource(url);
+  const requestState = {
+    source,
+    sessionId: requestSessionId,
+    finished: false,
+    finalAnswer: "",
+  };
 
-  let finalAnswer = "";
+  activeRequest = requestState;
+  currentEventSource = source;
 
-  currentEventSource.onmessage = (event) => {
-    const data = JSON.parse(event.data);
+  source.onmessage = (event) => {
+    if (activeRequest !== requestState || requestState.finished) return;
+
+    let data;
+
+    try {
+      data = JSON.parse(event.data);
+    } catch {
+      showRequestStep(requestState, "error", { message: "서버 응답을 읽지 못했습니다." });
+      appendMessageToSession(requestSessionId, "assistant", "서버 응답 형식에 문제가 발생했습니다.");
+      finishRequest(requestState);
+      return;
+    }
 
     if (data.type === "start") {
-      addStep("start", data);
+      showRequestStep(requestState, "start", data);
     }
 
     if (data.type === "input_masked") {
-      addStep("input_masked", data);
+      showRequestStep(requestState, "input_masked", data);
 
       if (data.masked_question) {
-        replaceLastUserMessage(data.masked_question);
+        replaceLastUserMessage(requestSessionId, data.masked_question);
       }
     }
 
     if (data.type === "tool_call") {
-      addStep("tool_call", data);
+      showRequestStep(requestState, "tool_call", data);
     }
 
     if (data.type === "tool_result") {
-      addStep("tool_result", data);
+      showRequestStep(requestState, "tool_result", data);
     }
 
     if (data.type === "answer") {
-      finalAnswer = data.content || "";
-      addStep("answer", data);
+      requestState.finalAnswer = data.content || requestState.finalAnswer;
+      showRequestStep(requestState, "answer", data);
     }
 
     if (data.type === "done") {
-      currentEventSource.close();
-      currentEventSource = null;
+      if (!finishRequest(requestState)) return;
 
-      if (data.usage) {
+      if (data.usage && requestSessionId === currentSessionId) {
         modelCallsEl.textContent = data.usage.model_calls ?? 0;
         toolCallsEl.textContent = data.usage.tool_calls ?? 0;
         totalCallsEl.textContent = data.usage.total_calls ?? 0;
       }
 
-      appendMessage("assistant", finalAnswer || data.answer || "답변을 생성하지 못했습니다.");
-      setRunning(false);
-      agentStatusEl.textContent = "완료";
+      const answer = requestState.finalAnswer || data.answer || "답변을 생성하지 못했습니다. 다시 질문해 주세요.";
+      appendMessageToSession(requestSessionId, "assistant", answer);
+
+      if (requestSessionId === currentSessionId) {
+        agentStatusEl.textContent = "완료";
+      }
     }
 
     if (data.type === "error") {
-      currentEventSource.close();
-      currentEventSource = null;
+      if (!finishRequest(requestState)) return;
 
-      addStep("error", data);
-      appendMessage("assistant", `오류가 발생했습니다.\n\n${data.message || "알 수 없는 오류"}`);
-      setRunning(false);
-      agentStatusEl.textContent = "오류";
+      showRequestStep(requestState, "error", data);
+      appendMessageToSession(requestSessionId, "assistant", `오류가 발생했습니다.\n\n${data.message || "알 수 없는 오류"}`);
+
+      if (requestSessionId === currentSessionId) {
+        agentStatusEl.textContent = "오류";
+      }
     }
   };
 
-  currentEventSource.onerror = () => {
-    if (currentEventSource) {
-      currentEventSource.close();
-      currentEventSource = null;
-    }
+  source.onerror = () => {
+    if (activeRequest !== requestState || requestState.finished) return;
+    if (!finishRequest(requestState)) return;
 
-    addStep("error", {
+    showRequestStep(requestState, "error", {
       message: "SSE 연결이 종료되었거나 서버 응답을 받을 수 없습니다.",
     });
 
-    appendMessage("assistant", "서버와의 연결 중 문제가 발생했습니다.");
-    setRunning(false);
-    agentStatusEl.textContent = "연결 오류";
+    appendMessageToSession(requestSessionId, "assistant", "서버와의 연결 중 문제가 발생했습니다. 잠시 후 다시 시도해 주세요.");
+
+    if (requestSessionId === currentSessionId) {
+      agentStatusEl.textContent = "연결 오류";
+    }
   };
 }
 

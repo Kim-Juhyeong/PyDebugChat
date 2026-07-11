@@ -265,7 +265,8 @@ def _message_content_to_text(content) -> str:
 
 @app.get("/api/agent/stream")
 async def agent_stream(
-    question: str = Query(...),
+    request: Request,
+    question: str = Query(..., min_length=1, max_length=12000),
     session_id: str | None = Query(None),
 ):
     """
@@ -282,6 +283,10 @@ async def agent_stream(
     """
 
     session_id = session_id or str(uuid.uuid4())
+    question = question.strip()
+
+    if not question:
+        raise HTTPException(status_code=422, detail="질문을 입력해 주세요.")
 
     async def event_generator():
         limiter = CallLimitCallbackHandler(
@@ -308,8 +313,20 @@ async def agent_stream(
                 })
 
             final_answer = ""
+            answer_sent = False
+            observed_tool_results = 0
 
             runtime_graph = await get_graph()
+
+            graph_config = {
+                "configurable": {
+                    "thread_id": session_id,
+                },
+                "callbacks": [
+                    limiter,
+                ],
+                "recursion_limit": MAX_GRAPH_STEPS,
+            }
 
             async for update in runtime_graph.astream(
                 {
@@ -317,17 +334,13 @@ async def agent_stream(
                         HumanMessage(content=safe_question)
                     ]
                 },
-                config={
-                    "configurable": {
-                        "thread_id": session_id,
-                    },
-                    "callbacks": [
-                        limiter,
-                    ],
-                    "recursion_limit": MAX_GRAPH_STEPS,
-                },
+                config=graph_config,
                 stream_mode="updates",
             ):
+                if await request.is_disconnected():
+                    logger.info(f"SSE client disconnected. session_id={session_id}")
+                    return
+
                 for node_name, node_data in update.items():
                     messages = node_data.get("messages", [])
 
@@ -346,6 +359,7 @@ async def agent_stream(
 
                         # 2) Tool 실행 결과
                         if isinstance(msg, ToolMessage):
+                            observed_tool_results += 1
                             content = _message_content_to_text(msg.content)
 
                             yield sse({
@@ -357,6 +371,7 @@ async def agent_stream(
 
                         # 3) StackOverflow fallback은 AIMessage로 들어오므로 별도 표시
                         elif node_name == "stackoverflow_fallback" and isinstance(msg, AIMessage):
+                            observed_tool_results += 1
                             content = _message_content_to_text(msg.content)
 
                             yield sse({
@@ -373,6 +388,7 @@ async def agent_stream(
                             if content.strip() and not tool_calls:
                                 safe_answer, output_summary = sanitize_text(content)
                                 final_answer = safe_answer
+                                answer_sent = True
 
                                 yield sse({
                                     "type": "answer",
@@ -381,7 +397,25 @@ async def agent_stream(
                                     "output_sanitization": output_summary,
                                 })
 
+            if not final_answer:
+                snapshot = await runtime_graph.aget_state(graph_config)
+                recovered_answer = _extract_final_answer(snapshot.values)
+                safe_answer, output_summary = sanitize_text(recovered_answer)
+
+                if safe_answer.strip():
+                    final_answer = safe_answer
+
+                    if not answer_sent:
+                        yield sse({
+                            "type": "answer",
+                            "session_id": session_id,
+                            "content": safe_answer,
+                            "output_sanitization": output_summary,
+                        })
+
             counts = limiter.get_counts()
+            counts["tool_calls"] = max(counts["tool_calls"], observed_tool_results)
+            counts["total_calls"] = counts["model_calls"] + counts["tool_calls"]
 
             yield sse({
                 "type": "done",
@@ -404,6 +438,15 @@ async def agent_stream(
                 "message": "모델 또는 Tool 호출 횟수 제한을 초과했습니다.",
             })
 
+        except GraphRecursionError as e:
+            logger.warning(f"SSE recursion limit exceeded: {str(e)}")
+
+            yield sse({
+                "type": "error",
+                "error_type": "GraphRecursionLimitExceeded",
+                "message": "분석 단계가 너무 많아 작업을 중단했습니다. 질문 범위를 줄여 다시 시도해 주세요.",
+            })
+
         except Exception as e:
             logger.error(f"SSE agent stream error: {str(e)}", exc_info=True)
 
@@ -416,4 +459,9 @@ async def agent_stream(
     return StreamingResponse(
         event_generator(),
         media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache, no-transform",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
     )
