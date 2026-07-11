@@ -1,4 +1,5 @@
 import html
+import re
 import requests
 
 from langchain_core.tools import tool
@@ -10,8 +11,7 @@ from app.config import CHROMA_DB_DIR, COLLECTION_NAME, EMBEDDING_MODEL
 from app.projects import search_project_code
 
 # 환경변수
-ERROR_SCORE_THRESHOLD = 0.55
-MIN_ERROR_DOCS = 2
+ERROR_SCORE_THRESHOLD = 1.0
 
 # ChromaDB 설정
 embedding_model = OpenAIEmbeddings(
@@ -57,6 +57,53 @@ def _format_doc(doc, index: int, score: float | None = None) -> str:
 # 검색 오류 메시지 처리
 def _safe_search_error_message(e: Exception) -> str:
     return f"검색 중 오류가 발생했습니다: {type(e).__name__}: {str(e)}"
+
+
+_EXCEPTION_NAME_PATTERN = re.compile(
+    r"\b([A-Za-z_][A-Za-z0-9_]*(?:Error|Exception|Warning))\b"
+)
+
+
+def _build_error_search_query(query: str) -> tuple[str, set[str]]:
+    """긴 코드 전체보다 Exception 이름과 Traceback 핵심 줄을 우선 검색한다."""
+    exception_names = {
+        match.group(1)
+        for match in _EXCEPTION_NAME_PATTERN.finditer(query)
+    }
+    lines = [line.strip() for line in query.splitlines() if line.strip()]
+    important_lines = [
+        line
+        for line in lines
+        if (
+            "traceback" in line.lower()
+            or any(name.lower() in line.lower() for name in exception_names)
+        )
+    ]
+
+    if not important_lines:
+        important_lines = lines[-8:]
+
+    terms = " ".join(sorted(exception_names))
+    core = "\n".join(important_lines[-8:])
+    search_query = f"Python {terms} exception traceback {core}".strip()
+    return search_query[:2000], {name.lower() for name in exception_names}
+
+
+def _is_relevant_error_doc(doc, score: float, exception_names: set[str]) -> bool:
+    """정확한 Exception 이름이 있거나 벡터 거리가 합리적이면 관련 문서로 본다."""
+    metadata = doc.metadata or {}
+    searchable = " ".join(
+        [
+            str(metadata.get("title", "")),
+            str(metadata.get("section", "")),
+            doc.page_content,
+        ]
+    ).lower()
+
+    if exception_names and any(name in searchable for name in exception_names):
+        return True
+
+    return score <= ERROR_SCORE_THRESHOLD
 
 # Tool 1. Python 공식문서 RAG 검색
 @tool
@@ -184,24 +231,12 @@ def python_error_search(query: str) -> str:
     Returns:
         Python 공식 문서 기반 Exception 검색 결과와 충분성 상태
     """
-    expanded_query = f"""
-    Python Exception Traceback Error Debugging
-    
-    사용자 에러 메시지:
-    {query}
-    
-    검색 의도:
-    - 에러 의미
-    - 발생 원인
-    - 관련 Exception 클래스
-    - 해결 방법
-    - 공식 문서 근거
-    """
+    search_query, exception_names = _build_error_search_query(query)
 
     try:
         # k=8로 검색
         docs_with_scores = vectorstore.similarity_search_with_score(
-            expanded_query,
+            search_query,
             k=8,
         )
 
@@ -218,14 +253,14 @@ def python_error_search(query: str) -> str:
         filtered = [
             (doc, score)
             for doc, score in docs_with_scores
-            if score <= ERROR_SCORE_THRESHOLD
+            if _is_relevant_error_doc(doc, score, exception_names)
         ]
 
-        if len(filtered) < MIN_ERROR_DOCS:
+        if not filtered:
             status = "INSUFFICIENT"
             reason = (
-                f"관련도 기준을 통과한 문서가 {len(filtered)}개입니다. "
-                f"최소 필요 문서 수는 {MIN_ERROR_DOCS}개입니다."
+                "Exception 이름이 일치하거나 관련도 기준을 통과한 "
+                "공식 문서를 찾지 못했습니다."
             )
 
             fallback_docs = docs_with_scores[:3]
@@ -237,7 +272,10 @@ def python_error_search(query: str) -> str:
 
         else:
             status = "SUFFICIENT"
-            reason = "Python 공식 문서에서 충분한 관련 문서를 찾았습니다."
+            reason = (
+                f"Python 공식 문서에서 관련 문서 {len(filtered)}개를 찾았습니다. "
+                "공식 문서를 우선 근거로 사용합니다."
+            )
 
             results = [
                 _format_doc(doc, index=i, score=score)
@@ -255,7 +293,7 @@ def python_error_search(query: str) -> str:
 
     except Exception as e:
         return f"""
-[SEARCH_STATUS]: INSUFFICIENT
+[SEARCH_STATUS]: ERROR
 [SEARCH_TOOL]: python_error_search
 [QUERY]: {query}
 

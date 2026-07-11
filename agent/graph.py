@@ -180,7 +180,10 @@ def _get_last_python_error_query(state: State) -> str:
 
 def _has_insufficient_python_error_result(state: State) -> bool:
     """
-    ToolNode 실행 결과 중 python_error_search 결과가 부족한지 확인한다.
+    ToolNode 실행 결과 중 python_error_search가 정상 수행됐지만
+    관련 공식 문서를 찾지 못했는지 확인한다.
+
+    검색 시스템 오류는 StackOverflow 검색으로 감추지 않고 최종 답변에 전달한다.
     """
     for message in reversed(state["messages"]):
         if not isinstance(message, ToolMessage):
