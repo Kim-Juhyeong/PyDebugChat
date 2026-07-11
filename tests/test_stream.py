@@ -28,9 +28,11 @@ class FakeStreamingGraph:
         self.updates = updates
         self.recovered_answer = recovered_answer
         self.thread_ids = []
+        self.inputs = []
 
     async def astream(self, *args, **kwargs):
         self.thread_ids.append(kwargs["config"]["configurable"]["thread_id"])
+        self.inputs.append(args[0]["messages"][0].content)
         for update in self.updates:
             yield update
 
@@ -134,6 +136,64 @@ class AgentStreamTests(unittest.TestCase):
         events = parse_sse(response.text)
         self.assertEqual([event["type"] for event in events], ["start", "progress", "error"])
         self.assertNotIn("internal test detail", response.text)
+
+    def test_simple_code_is_added_to_agent_context(self):
+        graph = FakeStreamingGraph([
+            {"reasoning": {"messages": [AIMessage(content="코드 답변")]}}
+        ])
+
+        async def fake_get_graph():
+            return graph
+
+        with patch.object(server_module, "get_graph", fake_get_graph):
+            response = self.client.get(
+                "/api/agent/stream",
+                params={
+                    "session_id": "simple-code",
+                    "question": "왜 오류가 나?",
+                    "language": "python",
+                    "code": "print(missing_name)",
+                },
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("print(missing_name)", graph.inputs[0])
+        self.assertIn("사용자에게 코드를 다시 붙여넣으라고 요청하지 마세요", graph.inputs[0])
+
+    def test_project_file_is_added_to_agent_context(self):
+        graph = FakeStreamingGraph([
+            {"reasoning": {"messages": [AIMessage(content="프로젝트 답변")]}}
+        ])
+
+        async def fake_get_graph():
+            return graph
+
+        with (
+            patch.object(server_module, "get_graph", fake_get_graph),
+            patch.object(server_module, "get_project", return_value={"name": "demo"}),
+            patch.object(
+                server_module,
+                "read_project_file",
+                return_value={
+                    "path": "src/main.py",
+                    "language": "python",
+                    "content": "print(project_value)",
+                },
+            ),
+        ):
+            response = self.client.get(
+                "/api/agent/stream",
+                params={
+                    "session_id": "project-demo",
+                    "question": "이 코드 분석해줘",
+                    "project_id": "a" * 32,
+                    "file_path": "src/main.py",
+                },
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("ACTIVE_PROJECT_ID", graph.inputs[0])
+        self.assertIn("print(project_value)", graph.inputs[0])
 
 
 if __name__ == "__main__":

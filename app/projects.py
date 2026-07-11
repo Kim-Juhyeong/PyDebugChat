@@ -257,3 +257,59 @@ def read_project_file(project_id: str, relative_path: str) -> dict:
         "line_count": len(content.splitlines()) or 1,
         "language": detect_language(target),
     }
+
+
+def search_project_code(project_id: str, query: str, max_results: int = 8) -> list[dict]:
+    """Search source lines in one uploaded project without loading it all into the model."""
+    files_dir = _project_dir(project_id) / "files"
+    if not files_dir.is_dir():
+        raise FileNotFoundError("프로젝트 파일을 찾을 수 없습니다.")
+
+    normalized_query = (query or "").strip().lower()
+    tokens = {
+        token
+        for token in re.findall(r"[0-9A-Za-z_가-힣.]+", normalized_query)
+        if len(token) >= 2
+    }
+    matches = []
+
+    for path in files_dir.rglob("*"):
+        if not path.is_file():
+            continue
+
+        relative = path.relative_to(files_dir).as_posix()
+        payload = path.read_bytes()
+        content = None
+        for encoding in ("utf-8-sig", "utf-8", "cp949"):
+            try:
+                content = payload.decode(encoding)
+                break
+            except UnicodeDecodeError:
+                continue
+        if content is None:
+            continue
+
+        path_lower = relative.lower()
+        source_lines = content.splitlines()
+        for line_number, line in enumerate(source_lines, 1):
+            haystack = f"{path_lower} {line.lower()}"
+            token_hits = sum(1 for token in tokens if token in haystack)
+            exact_hit = bool(normalized_query and normalized_query in haystack)
+            if not exact_hit and token_hits == 0:
+                continue
+
+            start = max(1, line_number - 2)
+            end = min(len(source_lines), line_number + 2)
+            snippet = "\n".join(
+                f"{index}: {source_lines[index - 1]}"
+                for index in range(start, end + 1)
+            )
+            matches.append({
+                "path": relative,
+                "line": line_number,
+                "score": token_hits + (5 if exact_hit else 0),
+                "snippet": snippet,
+            })
+
+    matches.sort(key=lambda item: (-item["score"], item["path"], item["line"]))
+    return matches[:max_results]

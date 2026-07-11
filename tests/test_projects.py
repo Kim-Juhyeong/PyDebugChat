@@ -76,6 +76,18 @@ class ProjectServiceTests(unittest.TestCase):
 
         self.assertFalse(project_dir.exists())
 
+    def test_project_code_search_returns_file_and_line(self):
+        payload = make_zip({
+            "src/service.py": "def load_user():\n    return missing_name\n",
+            "src/main.py": "from service import load_user\n",
+        })
+        project = projects_module.create_project_from_zip("search.zip", payload)
+
+        matches = projects_module.search_project_code(project["id"], "missing_name")
+
+        self.assertEqual(matches[0]["path"], "src/service.py")
+        self.assertEqual(matches[0]["line"], 2)
+
 
 class ProjectApiTests(unittest.TestCase):
     def setUp(self):
@@ -126,9 +138,12 @@ class ProjectApiTests(unittest.TestCase):
         )
         project_id = upload.json()["project"]["id"]
 
-        response = self.client.delete(f"/api/projects/{project_id}")
+        cleanup = AsyncMock()
+        with patch.object(server_module, "delete_thread", cleanup):
+            response = self.client.delete(f"/api/projects/{project_id}")
 
         self.assertEqual(response.status_code, 204)
+        cleanup.assert_awaited_once_with(f"project-{project_id}")
         self.assertEqual(self.client.get("/api/projects").json()["projects"], [])
 
 

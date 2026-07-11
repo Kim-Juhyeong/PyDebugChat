@@ -197,56 +197,40 @@ body {
   color: #86efac;
 }
 
-.project-picker-wrap {
-  padding: 0 12px 12px;
+.project-list {
+  min-height: 0;
+  flex: 2 1 0;
+  overflow-y: auto;
+  padding: 6px;
 }
 
-.project-picker-wrap label {
-  display: block;
-  margin-bottom: 5px;
-  color: var(--muted);
-  font-size: 10px;
-  font-weight: 700;
-  text-transform: uppercase;
+.project-debug-view .file-tree {
+  flex: 1 1 0;
 }
 
-.project-picker-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 32px;
-  gap: 5px;
-}
-
-.project-picker-wrap select {
-  width: 100%;
-  height: 32px;
-  border: 1px solid var(--border);
+.project-item {
+  position: relative;
+  min-height: 48px;
+  margin-bottom: 3px;
+  padding: 8px 34px 8px 9px;
+  border: 1px solid transparent;
   border-radius: 5px;
-  outline: 0;
-  background: #191a1c;
-  color: var(--text);
-  font-size: 11px;
-  padding: 0 8px;
-}
-
-#delete-project-btn {
-  height: 32px;
-  border: 1px solid var(--border);
-  border-radius: 5px;
-  background: #242529;
-  color: #aeb2ba;
+  color: #cfd2d8;
   cursor: pointer;
-  font-size: 17px;
 }
 
-#delete-project-btn:hover:not(:disabled) {
-  border-color: rgba(248, 113, 113, 0.6);
-  background: rgba(248, 113, 113, 0.14);
-  color: #fca5a5;
+.project-item:hover {
+  background: #292b2e;
 }
 
-#delete-project-btn:disabled {
-  cursor: not-allowed;
-  opacity: 0.35;
+.project-item.active {
+  border-color: #55456e;
+  background: var(--accent-soft);
+}
+
+.project-item:hover .chat-delete,
+.project-item .chat-delete:focus-visible {
+  opacity: 1;
 }
 
 .tree-heading {
@@ -515,6 +499,26 @@ body {
   font-family: "Cascadia Code", "SFMono-Regular", Consolas, monospace;
   font-size: 12px;
   line-height: 1.65;
+}
+
+.simple-code-editor {
+  width: 100%;
+  height: 100%;
+  resize: none;
+  padding: 16px 20px;
+  border: 0;
+  outline: 0;
+  background: var(--editor);
+  color: #d5d8de;
+  font-family: "Cascadia Code", "SFMono-Regular", Consolas, monospace;
+  font-size: 13px;
+  line-height: 1.65;
+  tab-size: 4;
+  white-space: pre;
+}
+
+.simple-code-editor::placeholder {
+  color: #555b65;
 }
 
 .code-line {

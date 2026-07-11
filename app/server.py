@@ -277,6 +277,10 @@ async def agent_stream(
     request: Request,
     question: str = Query(..., min_length=1, max_length=12000),
     session_id: str | None = Query(None),
+    project_id: str | None = Query(None),
+    file_path: str | None = Query(None, max_length=1000),
+    code: str | None = Query(None, max_length=6000),
+    language: str | None = Query(None, max_length=30),
 ):
     """
     UI에서 Agent 실행 과정을 실시간으로 보기 위한 SSE endpoint.
@@ -307,6 +311,51 @@ async def agent_stream(
 
         try:
             safe_question, input_summary = sanitize_text(question)
+            agent_question = safe_question
+            code_summary = {"masked": False}
+
+            if code:
+                safe_code, code_summary = sanitize_text(code)
+                code_language = language or "text"
+                agent_question = "\n".join([
+                    "[DEBUG_CODE]",
+                    f"LANGUAGE: {code_language}",
+                    f"```{code_language}",
+                    safe_code,
+                    "```",
+                    "위 코드는 사용자가 중앙 코드 입력창에 작성한 분석 대상입니다.",
+                    "사용자에게 코드를 다시 붙여넣으라고 요청하지 마세요.",
+                    "[USER_QUESTION]",
+                    safe_question,
+                ])
+
+            if project_id:
+                project = get_project(project_id)
+                context_parts = [
+                    "[ACTIVE_PROJECT]",
+                    f"ACTIVE_PROJECT_ID: {project_id}",
+                    f"PROJECT_NAME: {project['name']}",
+                ]
+
+                if file_path:
+                    current_file = read_project_file(project_id, file_path)
+                    content = current_file["content"]
+                    if len(content) > 24000:
+                        content = content[:24000] + "\n... [파일 내용 일부 생략]"
+                    context_parts.extend([
+                        f"CURRENT_FILE: {current_file['path']}",
+                        f"CURRENT_LANGUAGE: {current_file['language']}",
+                        "CURRENT_FILE_CONTENT:",
+                        f"```{current_file['language']}\n{content}\n```",
+                    ])
+
+                context_parts.extend([
+                    "프로젝트의 다른 파일이 필요하면 project_code_search를 사용하세요.",
+                    "사용자에게 코드를 다시 붙여넣으라고 요청하지 마세요.",
+                    "[USER_QUESTION]",
+                    safe_question,
+                ])
+                agent_question = "\n".join(context_parts)
 
             yield sse({
                 "type": "start",
@@ -320,7 +369,7 @@ async def agent_stream(
                 "message": "이전 대화 맥락과 입력 내용을 확인하고 있습니다.",
             })
 
-            if input_summary.get("masked"):
+            if input_summary.get("masked") or code_summary.get("masked"):
                 yield sse({
                     "type": "input_masked",
                     "session_id": session_id,
@@ -347,7 +396,7 @@ async def agent_stream(
             async for update in runtime_graph.astream(
                 {
                     "messages": [
-                        HumanMessage(content=safe_question)
+                        HumanMessage(content=agent_question)
                     ]
                 },
                 config=graph_config,
@@ -541,6 +590,8 @@ async def project_file(project_id: str, path: str = Query(..., min_length=1, max
 @app.delete("/api/projects/{project_id}", status_code=204)
 async def project_delete(project_id: str):
     try:
+        get_project(project_id)
+        await delete_thread(f"project-{project_id}")
         delete_project(project_id)
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc

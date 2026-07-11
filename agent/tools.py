@@ -7,6 +7,7 @@ from langchain_chroma import Chroma
 from langchain_openai import OpenAIEmbeddings
 
 from app.config import CHROMA_DB_DIR, COLLECTION_NAME, EMBEDDING_MODEL
+from app.projects import search_project_code
 
 # 환경변수
 ERROR_SCORE_THRESHOLD = 0.55
@@ -402,8 +403,37 @@ def web_search(query: str) -> str:
     except Exception as e:
         return f"웹 {_safe_search_error_message(e)}"
 
+
+@tool
+def project_code_search(project_id: str, query: str) -> str:
+    """
+    현재 업로드된 프로젝트 전체에서 관련 코드와 오류 위치를 검색합니다.
+
+    시스템 메시지에 ACTIVE_PROJECT_ID가 있을 때만 사용합니다. 현재 열린 파일 외의
+    함수, 클래스, 설정, import 관계를 찾아야 할 때 해당 project_id를 그대로 전달합니다.
+
+    Args:
+        project_id: 시스템 메시지에 제공된 활성 프로젝트 ID
+        query: 찾을 함수명, 클래스명, 오류 메시지 또는 코드 특징
+    """
+    try:
+        matches = search_project_code(project_id, query)
+    except FileNotFoundError:
+        return "[PROJECT_SEARCH_STATUS]: NOT_FOUND\n프로젝트를 찾을 수 없습니다."
+
+    if not matches:
+        return "[PROJECT_SEARCH_STATUS]: NO_MATCH\n관련 코드를 찾지 못했습니다."
+
+    sections = ["[PROJECT_SEARCH_STATUS]: FOUND"]
+    for index, match in enumerate(matches, 1):
+        sections.append(
+            f"[{index}] {match['path']}:{match['line']}\n{match['snippet']}"
+        )
+    return "\n\n".join(sections)
+
 # Agent Tool 목록
 tools = [
+    project_code_search,
     python_docs_search,
     python_error_search,
     stackoverflow_search,

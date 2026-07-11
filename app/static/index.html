@@ -4,14 +4,14 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>PyDebug Studio</title>
-  <link rel="stylesheet" href="/static/style.css?v=20260711-5" />
+  <link rel="stylesheet" href="/static/style.css?v=20260711-6" />
 </head>
 <body>
   <div class="app-shell">
     <nav class="activity-bar" aria-label="사이드바 보기 전환">
       <div class="activity-brand" title="PyDebug Studio">PD</div>
-      <button class="activity-btn active" data-sidebar-view="files" aria-label="프로젝트 탐색기" title="프로젝트 탐색기">▱</button>
-      <button class="activity-btn" data-sidebar-view="chats" aria-label="대화 기록" title="대화 기록">◫</button>
+      <button class="activity-btn active" data-sidebar-view="projects" aria-label="프로젝트 디버깅" title="프로젝트 디버깅">▱</button>
+      <button class="activity-btn" data-sidebar-view="simple" aria-label="단순 코드 디버깅" title="단순 코드 디버깅">◫</button>
       <div class="activity-spacer"></div>
       <div class="activity-status" title="OCI 연결">●</div>
     </nav>
@@ -19,28 +19,26 @@
     <aside class="side-panel">
       <header class="side-header">
         <span class="eyebrow">PYDEBUG STUDIO</span>
-        <strong id="side-title">탐색기</strong>
+        <strong id="side-title">프로젝트 디버깅</strong>
       </header>
 
-      <section class="sidebar-view active" id="files-sidebar-view">
+      <section class="sidebar-view project-debug-view active" id="projects-sidebar-view">
         <div class="project-actions">
-          <label class="upload-btn" for="project-upload">ZIP 프로젝트 열기</label>
+          <label class="upload-btn" for="project-upload">＋ ZIP 프로젝트 추가</label>
           <input id="project-upload" type="file" accept=".zip,application/zip" hidden />
           <p id="upload-status">최대 10MB · 소스 파일 200개</p>
         </div>
 
-        <div class="project-picker-wrap">
-          <label for="project-picker">프로젝트</label>
-          <div class="project-picker-row">
-            <select id="project-picker" aria-label="프로젝트 선택">
-              <option value="">업로드된 프로젝트 없음</option>
-            </select>
-            <button id="delete-project-btn" type="button" aria-label="현재 프로젝트 삭제" title="프로젝트 삭제">×</button>
-          </div>
+        <div class="tree-heading">
+          <span>프로젝트 작업</span>
+          <span id="project-count">0</span>
+        </div>
+        <div class="project-list" id="project-list">
+          <div class="sidebar-empty">업로드한 프로젝트가 없습니다.</div>
         </div>
 
-        <div class="tree-heading">
-          <span>파일</span>
+        <div class="tree-heading file-tree-heading">
+          <span>선택 프로젝트 파일</span>
           <span id="project-file-count">0</span>
         </div>
         <div class="file-tree" id="file-tree">
@@ -48,9 +46,9 @@
         </div>
       </section>
 
-      <section class="sidebar-view" id="chats-sidebar-view">
-        <button class="new-chat-btn" id="new-chat-btn">＋ 새 디버깅 대화</button>
-        <div class="tree-heading"><span>최근 대화</span></div>
+      <section class="sidebar-view" id="simple-sidebar-view">
+        <button class="new-chat-btn" id="new-chat-btn">＋ 새 코드 디버깅</button>
+        <div class="tree-heading"><span>코드 디버깅 작업</span></div>
         <div class="chat-list" id="chat-list"></div>
       </section>
     </aside>
@@ -75,6 +73,7 @@
           <p>왼쪽 탐색기에서 ZIP 프로젝트를 업로드한 뒤 파일을 선택하세요.</p>
           <label class="empty-upload-btn" for="project-upload">프로젝트 업로드</label>
         </div>
+        <textarea class="simple-code-editor" id="simple-code-editor" spellcheck="false" hidden placeholder="분석할 코드를 여기에 입력하세요.\n\nPython, Java, C, C++ 코드를 지원합니다."></textarea>
         <div class="code-view" id="code-view" hidden></div>
       </section>
 
@@ -127,6 +126,6 @@
     </aside>
   </div>
 
-  <script src="/static/app.js?v=20260711-5"></script>
+  <script src="/static/app.js?v=20260711-6"></script>
 </body>
 </html>
