@@ -152,24 +152,10 @@ SECRET_PATTERN = re.compile(
 )
 
 PROFANITY_WORDS = [
-    "씨발",
-    "시발",
-    "ㅅㅂ",
-    "ㅆㅂ",
-    "병신",
-    "ㅂㅅ",
     "개새끼",
-    "새끼",
-    "지랄",
-    "ㅈㄹ",
-    "좆",
-    "좃",
-    "ㅈ같",
-    "엿같",
     "꺼져",
     "미친놈",
     "미친년",
-    "염병",
 ]
 
 PROFANITY_PATTERN = re.compile(
