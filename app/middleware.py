@@ -312,7 +312,11 @@ class ChatSafetyMiddleware(BaseHTTPMiddleware):
 
     async def dispatch(self, request: Request, call_next):
         if request.url.path.startswith("/static") or request.url.path in ["/", "/favicon.ico"]:
-            return await call_next(request)
+            response = await call_next(request)
+            response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+            response.headers["Pragma"] = "no-cache"
+            response.headers["Expires"] = "0"
+            return response
 
         start_time = time.perf_counter()
         client_ip = request.client.host if request.client else "unknown"
