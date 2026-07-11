@@ -1,6 +1,5 @@
 # ai
 
-import os
 import re
 import json
 import time
@@ -9,35 +8,25 @@ import logging
 from typing import Any, Dict, Tuple
 from logging.handlers import RotatingFileHandler
 
-from dotenv import load_dotenv
 from fastapi import Request
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 from langchain_core.callbacks import BaseCallbackHandler
 
-load_dotenv()
+from app.config import LOG_DIR, MAX_REQUEST_BYTES
 
 
-# 설정
-
-
-LOG_DIR = os.getenv("LOG_DIR", "/mnt/data/logs")
-LOG_FILE = os.path.join(LOG_DIR, "chatbot.log")
-
-MAX_REQUEST_BYTES = int(os.getenv("MAX_REQUEST_BYTES", "20000"))
-
-os.makedirs(LOG_DIR, exist_ok=True)
+# 환경변수
+LOG_FILE = LOG_DIR / "chatbot.log"
 
 
 # 로깅
-
-
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s",
     handlers=[
         RotatingFileHandler(
-            LOG_FILE,
+            str(LOG_FILE),
             maxBytes=5 * 1024 * 1024,
             backupCount=3,
             encoding="utf-8",
@@ -51,8 +40,6 @@ logger = logging.getLogger("debugging_agent")
 
 
 # 호출 제한 예외
-
-
 class CallLimitExceeded(RuntimeError):
     pass
 
@@ -395,6 +382,5 @@ class ChatSafetyMiddleware(BaseHTTPMiddleware):
                 content={
                     "error_type": "MiddlewareError",
                     "message": "요청 처리 중 서버 오류가 발생했습니다.",
-                    "detail": str(e),
                 },
             )

@@ -1,15 +1,10 @@
 # ai
 
-from importlib.resources import path
-import os
 import time
 import uuid
 import json
 
 from pathlib import Path
-from dotenv import load_dotenv
-
-from agent import graph
 from fastapi import FastAPI, Request, HTTPException, Query
 from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
@@ -24,22 +19,14 @@ except Exception:
         pass
 
 from agent.graph import get_graph
+from app.config import MAX_GRAPH_STEPS, MAX_MODEL_CALLS, MAX_TOOL_CALLS, MAX_TOTAL_CALLS
 from app.schemas import ChatRequest, ChatResponse, SanitizationInfo, UsageInfo
 from app.middleware import ChatSafetyMiddleware, CallLimitCallbackHandler, CallLimitExceeded, sanitize_text, logger
 
-load_dotenv()
 
 
-# 환경 변수
+# 환경변수
 SERVICE_NAME = "Python Debug Assistant"
-
-CHROMA_DB_DIR = path("/mnt/data/chroma_db")
-CHAT_HISTORY_DB = path("/mnt/data/chat_history.db")
-
-MAX_MODEL_CALLS = 3
-MAX_TOOL_CALLS = 5
-MAX_TOTAL_CALLS = 8
-MAX_GRAPH_STEPS = 12
 
 BASE_DIR = Path(__file__).resolve().parent
 STATIC_DIR = BASE_DIR / "static"
@@ -229,7 +216,6 @@ async def chat(request: Request, payload: ChatRequest):
             detail={
                 "error_type": "CallLimitExceeded",
                 "message": "모델 또는 Tool 호출 횟수 제한을 초과했습니다.",
-                "detail": str(e),
             },
         )
 
@@ -241,7 +227,6 @@ async def chat(request: Request, payload: ChatRequest):
             detail={
                 "error_type": "GraphRecursionLimitExceeded",
                 "message": "Agent 실행 단계가 너무 많아 중단했습니다. 무한 루프 방지를 위해 종료되었습니다.",
-                "detail": str(e),
             },
         )
 
@@ -253,7 +238,6 @@ async def chat(request: Request, payload: ChatRequest):
             detail={
                 "error_type": "AgentExecutionError",
                 "message": "에이전트 처리 중 오류가 발생했습니다.",
-                "detail": str(e),
             },
         )
 
@@ -418,7 +402,6 @@ async def agent_stream(
                 "type": "error",
                 "error_type": "CallLimitExceeded",
                 "message": "모델 또는 Tool 호출 횟수 제한을 초과했습니다.",
-                "detail": str(e),
             })
 
         except Exception as e:
@@ -427,7 +410,7 @@ async def agent_stream(
             yield sse({
                 "type": "error",
                 "error_type": "AgentStreamError",
-                "message": str(e),
+                "message": "에이전트 처리 중 오류가 발생했습니다.",
             })
 
     return StreamingResponse(

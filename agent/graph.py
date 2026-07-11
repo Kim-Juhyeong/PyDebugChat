@@ -1,4 +1,3 @@
-import os
 import aiosqlite
 
 from typing import Annotated, TypedDict
@@ -13,15 +12,7 @@ from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 from agent.tools import tools, stackoverflow_search
 from agent.parser import get_format_instructions, safe_parse_debugging_answer, render_debugging_answer
 
-from dotenv import load_dotenv
-load_dotenv()
-
-# 설정
-LLM_MODEL = "gpt-4o-mini"
-CHAT_HISTORY_DB = "/mnt/data/chat_history.db"
-
-# SQLite DB 경로 생성
-os.makedirs(os.path.dirname(CHAT_HISTORY_DB), exist_ok=True)
+from app.config import CHAT_HISTORY_DB, LLM_MODEL
 
 # LLM 설정
 llm = ChatOpenAI(
@@ -357,9 +348,9 @@ async def get_graph():
     if _runtime_graph is not None:
         return _runtime_graph
 
-    os.makedirs(os.path.dirname(CHAT_HISTORY_DB), exist_ok=True)
+    CHAT_HISTORY_DB.parent.mkdir(parents=True, exist_ok=True)
 
-    _async_conn = await aiosqlite.connect(CHAT_HISTORY_DB)
+    _async_conn = await aiosqlite.connect(str(CHAT_HISTORY_DB))
     _async_checkpointer = AsyncSqliteSaver(_async_conn)
 
     await _async_checkpointer.setup()

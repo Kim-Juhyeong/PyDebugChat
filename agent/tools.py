@@ -1,22 +1,14 @@
-from importlib.resources import path
-import os
 import html
 import requests
 
-from dotenv import load_dotenv
 from langchain_core.tools import tool
 from langchain_tavily import TavilySearch
 from langchain_chroma import Chroma
 from langchain_openai import OpenAIEmbeddings
 
-load_dotenv()
+from app.config import CHROMA_DB_DIR, COLLECTION_NAME, EMBEDDING_MODEL
 
-# 설정
-CHROMA_DB_DIR = path("/mnt/data/chroma_db")
-
-COLLECTION_NAME = "python_docs_collection"
-EMBEDDING_MODEL = "text-embedding-3-small"
-
+# 환경변수
 ERROR_SCORE_THRESHOLD = 0.55
 MIN_ERROR_DOCS = 2
 
@@ -27,7 +19,7 @@ embedding_model = OpenAIEmbeddings(
 
 # ChromaDB 인스턴스 생성
 vectorstore = Chroma(
-    persist_directory=CHROMA_DB_DIR,
+    persist_directory=str(CHROMA_DB_DIR),
     embedding_function=embedding_model,
     collection_name=COLLECTION_NAME,
 )

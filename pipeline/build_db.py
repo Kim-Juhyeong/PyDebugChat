@@ -1,28 +1,28 @@
-import os
+import sys
 import re
 import shutil
 
 from pathlib import Path
-from dotenv import load_dotenv
+
+if __package__ in (None, ""):
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from langchain_core.documents import Document
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_openai import OpenAIEmbeddings
 from langchain_chroma import Chroma
 
-load_dotenv()
+from app.config import (
+    CHROMA_DB_DIR,
+    COLLECTION_NAME,
+    EMBEDDING_MODEL,
+    PROCESSED_DATA_DIR,
+    RAW_DATA_DIR,
+)
 
 
-# 설정
-
-# 저장 디렉토리
-RAW_DATA_DIR = Path("/mnt/data/raw_docs")
-CHROMA_DB_DIR = Path("/mnt/data/chroma_db")
-PROCESSED_DATA_DIR = Path("/mnt/data/processed_docs")
-# 컬렉션 이름
-COLLECTION_NAME = "python_docs_collection"
+# 환경변수
 # 임베딩 모델 및 배치 사이즈
-EMBEDDING_MODEL = "text-embedding-3-small"
 BATCH_SIZE = 64
 # 청크 분할 설정
 CHUNK_SIZE = 1000

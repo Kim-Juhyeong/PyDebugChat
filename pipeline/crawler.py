@@ -1,13 +1,20 @@
-import os
+import sys
 import re
 import time
 import random
 import requests
 
+from pathlib import Path
+
 from bs4 import BeautifulSoup
 from collections import deque
 from urllib.parse import urljoin, urlparse
 from urllib.robotparser import RobotFileParser
+
+if __package__ in (None, ""):
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from app.config import RAW_DATA_DIR
 
 
 # 설정
@@ -31,7 +38,7 @@ TARGET_URLS = [
     "https://docs.python.org/ko/3/faq/"
 ]
 # 크롤링 데이터 저장 위치
-SAVE_DIR = "/mnt/data/raw_docs"
+SAVE_DIR = RAW_DATA_DIR
 
 # Session 생성
 session = requests.Session()
@@ -151,7 +158,7 @@ def save_text(url, text):
 
     filename = sanitize_filename(url)
 
-    filepath = os.path.join(SAVE_DIR, filename)
+    filepath = SAVE_DIR / filename
 
     with open(filepath, "w", encoding="utf-8") as f:
         f.write(text)
@@ -161,8 +168,7 @@ def save_text(url, text):
 # 크롤링
 def crawl():
 
-    if not os.path.exists(SAVE_DIR):
-        os.makedirs(SAVE_DIR)
+    SAVE_DIR.mkdir(parents=True, exist_ok=True)
 
     visited = set()
 
