@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>PyDebug Studio</title>
-  <link rel="stylesheet" href="/static/style.css?v=20260711-3" />
+  <link rel="stylesheet" href="/static/style.css?v=20260711-5" />
 </head>
 <body>
   <div class="app-shell">
@@ -31,9 +31,12 @@
 
         <div class="project-picker-wrap">
           <label for="project-picker">프로젝트</label>
-          <select id="project-picker" aria-label="프로젝트 선택">
-            <option value="">업로드된 프로젝트 없음</option>
-          </select>
+          <div class="project-picker-row">
+            <select id="project-picker" aria-label="프로젝트 선택">
+              <option value="">업로드된 프로젝트 없음</option>
+            </select>
+            <button id="delete-project-btn" type="button" aria-label="현재 프로젝트 삭제" title="프로젝트 삭제">×</button>
+          </div>
         </div>
 
         <div class="tree-heading">
@@ -124,6 +127,6 @@
     </aside>
   </div>
 
-  <script src="/static/app.js?v=20260711-3"></script>
+  <script src="/static/app.js?v=20260711-5"></script>
 </body>
 </html>

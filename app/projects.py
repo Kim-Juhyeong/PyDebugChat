@@ -183,6 +183,14 @@ def get_project(project_id: str) -> dict:
     return json.loads(metadata_path.read_text(encoding="utf-8"))
 
 
+def delete_project(project_id: str) -> None:
+    project_dir = _project_dir(project_id)
+    metadata_path = project_dir / "project.json"
+    if not metadata_path.is_file():
+        raise FileNotFoundError("프로젝트를 찾을 수 없습니다.")
+    shutil.rmtree(project_dir)
+
+
 def _tree_node(directory: Path, root: Path) -> list[dict]:
     nodes = []
     for item in sorted(directory.iterdir(), key=lambda path: (path.is_file(), path.name.lower())):

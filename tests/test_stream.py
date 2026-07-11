@@ -69,7 +69,10 @@ class AgentStreamTests(unittest.TestCase):
         self.assertEqual(response.headers["cache-control"], "no-cache, no-transform")
 
         events = parse_sse(response.text)
-        self.assertEqual([event["type"] for event in events], ["start", "answer", "done"])
+        self.assertEqual(
+            [event["type"] for event in events],
+            ["start", "progress", "progress", "answer", "done"],
+        )
         self.assertEqual(events[-1]["answer"], "테스트 답변")
 
     def test_stream_recovers_missing_answer_from_graph_state(self):
@@ -85,7 +88,10 @@ class AgentStreamTests(unittest.TestCase):
             )
 
         events = parse_sse(response.text)
-        self.assertEqual([event["type"] for event in events], ["start", "answer", "done"])
+        self.assertEqual(
+            [event["type"] for event in events],
+            ["start", "progress", "answer", "done"],
+        )
         self.assertEqual(events[-1]["answer"], "복구된 답변")
 
     def test_stream_rejects_blank_question(self):
@@ -126,7 +132,7 @@ class AgentStreamTests(unittest.TestCase):
             )
 
         events = parse_sse(response.text)
-        self.assertEqual([event["type"] for event in events], ["start", "error"])
+        self.assertEqual([event["type"] for event in events], ["start", "progress", "error"])
         self.assertNotIn("internal test detail", response.text)
 
 

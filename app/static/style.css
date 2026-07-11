@@ -22,6 +22,10 @@
   padding: 0;
 }
 
+[hidden] {
+  display: none !important;
+}
+
 button,
 input,
 select,
@@ -206,6 +210,12 @@ body {
   text-transform: uppercase;
 }
 
+.project-picker-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 32px;
+  gap: 5px;
+}
+
 .project-picker-wrap select {
   width: 100%;
   height: 32px;
@@ -216,6 +226,27 @@ body {
   color: var(--text);
   font-size: 11px;
   padding: 0 8px;
+}
+
+#delete-project-btn {
+  height: 32px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: #242529;
+  color: #aeb2ba;
+  cursor: pointer;
+  font-size: 17px;
+}
+
+#delete-project-btn:hover:not(:disabled) {
+  border-color: rgba(248, 113, 113, 0.6);
+  background: rgba(248, 113, 113, 0.14);
+  color: #fca5a5;
+}
+
+#delete-project-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.35;
 }
 
 .tree-heading {

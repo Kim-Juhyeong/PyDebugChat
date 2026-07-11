@@ -45,6 +45,7 @@ const chatSubtitleEl = document.getElementById("chat-subtitle");
 const stepsEl = document.getElementById("steps");
 const agentStatusEl = document.getElementById("agent-status");
 const clearStepsBtn = document.getElementById("clear-steps-btn");
+const agentPanelEl = document.getElementById("agent-panel");
 
 const modelCallsEl = document.getElementById("model-calls");
 const toolCallsEl = document.getElementById("tool-calls");
@@ -55,6 +56,7 @@ const sideTitleEl = document.getElementById("side-title");
 const projectUploadEl = document.getElementById("project-upload");
 const uploadStatusEl = document.getElementById("upload-status");
 const projectPickerEl = document.getElementById("project-picker");
+const deleteProjectBtn = document.getElementById("delete-project-btn");
 const projectFileCountEl = document.getElementById("project-file-count");
 const fileTreeEl = document.getElementById("file-tree");
 const editorProjectNameEl = document.getElementById("editor-project-name");
@@ -367,6 +369,13 @@ function addStep(type, data) {
     `;
   }
 
+  if (type === "progress") {
+    div.innerHTML = `
+      <div class="step-label">${escapeHtml(data.stage_label || "분석 진행")}</div>
+      <div class="step-content">${escapeHtml(data.message || "다음 단계를 처리하고 있습니다.")}</div>
+    `;
+  }
+
   if (type === "input_masked") {
     div.className = "step tool-result";
     div.innerHTML = `
@@ -377,18 +386,23 @@ function addStep(type, data) {
 
   if (type === "tool_call") {
     const meta = TOOL_META[data.tool] || TOOL_META.unknown;
+    const args = data.args || {};
+    const query = args.query || args.error_message || args.input || JSON.stringify(args);
+    const queryPreview = String(query).length > 240 ? `${String(query).slice(0, 240)}...` : String(query);
 
     div.innerHTML = `
       <div class="step-label">${meta.icon} ${meta.label}</div>
-      <div class="step-content">해결에 필요한 자료를 찾고 있습니다.</div>
+      <div class="step-content">검색어: ${escapeHtml(queryPreview || "질문 내용 기반 검색")}</div>
     `;
   }
 
   if (type === "tool_result") {
     const meta = TOOL_META[data.tool] || TOOL_META.unknown;
+    const result = String(data.content || "").replace(/\s+/g, " ").trim();
+    const resultPreview = result.length > 260 ? `${result.slice(0, 260)}...` : result;
     div.innerHTML = `
       <div class="step-label">${meta.icon} 자료 확인 완료</div>
-      <div class="step-content">${meta.label} 결과를 답변에 반영합니다.</div>
+      <div class="step-content">${escapeHtml(resultPreview || `${meta.label} 결과를 답변에 반영합니다.`)}</div>
     `;
   }
 
@@ -415,6 +429,10 @@ function setRunning(isRunning) {
   inputEl.disabled = isRunning;
   agentStatusEl.textContent = isRunning ? "실행 중..." : "대기 중";
   sendBtn.textContent = isRunning ? "실행 중" : "전송";
+
+  if (isRunning) {
+    agentPanelEl.open = true;
+  }
 }
 
 function setSidebarView(view) {
@@ -467,10 +485,12 @@ function renderProjectPicker() {
     option.textContent = "업로드된 프로젝트 없음";
     projectPickerEl.appendChild(option);
     projectPickerEl.disabled = true;
+    deleteProjectBtn.disabled = true;
     return;
   }
 
   projectPickerEl.disabled = false;
+  deleteProjectBtn.disabled = false;
   projects.forEach((project) => {
     const option = document.createElement("option");
     option.value = project.id;
@@ -478,6 +498,48 @@ function renderProjectPicker() {
     option.selected = project.id === currentProjectId;
     projectPickerEl.appendChild(option);
   });
+}
+
+function resetEditor() {
+  currentFilePath = null;
+  editorEmptyEl.hidden = false;
+  codeViewEl.hidden = true;
+  codeViewEl.innerHTML = "";
+  editorProjectNameEl.textContent = "프로젝트를 열어주세요";
+  editorLanguageEl.textContent = "TEXT";
+  editorTabsEl.innerHTML = '<div class="editor-tab muted">열린 파일 없음</div>';
+  editorFileStatusEl.textContent = "파일 없음";
+  editorLineStatusEl.textContent = "Ln 1, Col 1";
+  projectFileCountEl.textContent = "0";
+  fileTreeEl.innerHTML = '<div class="sidebar-empty">ZIP 프로젝트를 업로드하면 파일 목록이 표시됩니다.</div>';
+}
+
+async function deleteCurrentProject() {
+  const project = projects.find((item) => item.id === currentProjectId);
+  if (!project) return;
+
+  if (!window.confirm(`“${project.name}” 프로젝트와 업로드된 파일을 모두 삭제할까요?`)) return;
+
+  deleteProjectBtn.disabled = true;
+
+  try {
+    const response = await fetch(`/api/projects/${encodeURIComponent(project.id)}`, {
+      method: "DELETE",
+    });
+    if (!response.ok) throw new Error("프로젝트 삭제 요청이 실패했습니다.");
+
+    currentProjectId = null;
+    currentFilePath = null;
+    localStorage.removeItem(ACTIVE_PROJECT_KEY);
+    localStorage.removeItem(ACTIVE_FILE_KEY);
+    resetEditor();
+    setUploadStatus("프로젝트를 삭제했습니다.", "success");
+    await loadProjects();
+  } catch (error) {
+    console.error(error);
+    setUploadStatus("프로젝트를 삭제하지 못했습니다.", "error");
+    deleteProjectBtn.disabled = false;
+  }
 }
 
 function renderFileTree(nodes) {
@@ -621,6 +683,8 @@ async function loadProjects() {
 
     if (currentProjectId) {
       await loadProject(currentProjectId, localStorage.getItem(ACTIVE_FILE_KEY));
+    } else {
+      resetEditor();
     }
   } catch (error) {
     console.error(error);
@@ -734,6 +798,20 @@ function sendMessage() {
 
     if (data.type === "start") {
       showRequestStep(requestState, "start", data);
+      agentStatusEl.textContent = "입력 확인 중";
+    }
+
+    if (data.type === "progress") {
+      const stageLabels = {
+        context: "대화 맥락 확인",
+        reasoning: "질문 유형 분석",
+        tools: "검색 자료 정리",
+        stackoverflow_fallback: "보완 사례 검색",
+        final_answer: "최종 답변 구성",
+      };
+      data.stage_label = stageLabels[data.stage] || "분석 진행";
+      showRequestStep(requestState, "progress", data);
+      agentStatusEl.textContent = data.stage_label;
     }
 
     if (data.type === "input_masked") {
@@ -746,10 +824,12 @@ function sendMessage() {
 
     if (data.type === "tool_call") {
       showRequestStep(requestState, "tool_call", data);
+      agentStatusEl.textContent = `${(TOOL_META[data.tool] || TOOL_META.unknown).label} 중`;
     }
 
     if (data.type === "tool_result") {
       showRequestStep(requestState, "tool_result", data);
+      agentStatusEl.textContent = "검색 결과 정리 중";
     }
 
     if (data.type === "answer") {
@@ -843,6 +923,10 @@ projectPickerEl.addEventListener("change", () => {
   currentFilePath = null;
   localStorage.removeItem(ACTIVE_FILE_KEY);
   loadProject(projectPickerEl.value);
+});
+
+deleteProjectBtn.addEventListener("click", () => {
+  deleteCurrentProject();
 });
 
 document.querySelectorAll(".quick-btn").forEach((btn) => {

@@ -67,6 +67,15 @@ class ProjectServiceTests(unittest.TestCase):
         self.assertEqual(project["file_count"], 1)
         self.assertFalse((self.projects_dir / project["id"] / "files" / ".env").exists())
 
+    def test_project_directory_can_be_deleted(self):
+        payload = make_zip({"main.py": "print('delete me')"})
+        project = projects_module.create_project_from_zip("delete.zip", payload)
+        project_dir = self.projects_dir / project["id"]
+
+        projects_module.delete_project(project["id"])
+
+        self.assertFalse(project_dir.exists())
+
 
 class ProjectApiTests(unittest.TestCase):
     def setUp(self):
@@ -108,6 +117,19 @@ class ProjectApiTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 204)
         cleanup.assert_awaited_once_with("session-to-delete")
+
+    def test_delete_project_removes_uploaded_files(self):
+        payload = make_zip({"src/main.py": "value = 42\n"})
+        upload = self.client.post(
+            "/api/projects",
+            files={"file": ("remove.zip", payload, "application/zip")},
+        )
+        project_id = upload.json()["project"]["id"]
+
+        response = self.client.delete(f"/api/projects/{project_id}")
+
+        self.assertEqual(response.status_code, 204)
+        self.assertEqual(self.client.get("/api/projects").json()["projects"], [])
 
 
 if __name__ == "__main__":

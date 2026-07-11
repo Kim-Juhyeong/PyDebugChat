@@ -23,6 +23,7 @@ from app.config import MAX_GRAPH_STEPS, MAX_MODEL_CALLS, MAX_TOOL_CALLS, MAX_TOT
 from app.projects import (
     ProjectArchiveError,
     create_project_from_zip,
+    delete_project,
     get_project,
     get_project_tree,
     list_projects,
@@ -282,6 +283,7 @@ async def agent_stream(
 
     반환 이벤트 type:
     - start
+    - progress
     - input_masked
     - tool_call
     - tool_result
@@ -310,6 +312,12 @@ async def agent_stream(
                 "type": "start",
                 "session_id": session_id,
                 "message": "Agent 실행을 시작합니다.",
+            })
+
+            yield sse({
+                "type": "progress",
+                "stage": "context",
+                "message": "이전 대화 맥락과 입력 내용을 확인하고 있습니다.",
             })
 
             if input_summary.get("masked"):
@@ -350,6 +358,20 @@ async def agent_stream(
                     return
 
                 for node_name, node_data in update.items():
+                    progress_messages = {
+                        "reasoning": "질문 유형을 분석하고 사용할 도구를 결정했습니다.",
+                        "tools": "선택한 검색 도구에서 관련 자료를 확인했습니다.",
+                        "stackoverflow_fallback": "공식 문서 결과를 보완할 사례를 추가로 확인했습니다.",
+                        "final_answer": "검색 결과와 대화 맥락을 바탕으로 답변을 구성했습니다.",
+                    }
+
+                    if node_name in progress_messages:
+                        yield sse({
+                            "type": "progress",
+                            "stage": node_name,
+                            "message": progress_messages[node_name],
+                        })
+
                     messages = node_data.get("messages", [])
 
                     for msg in messages:
@@ -514,6 +536,15 @@ async def project_file(project_id: str, path: str = Query(..., min_length=1, max
         return read_project_file(project_id, path)
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@app.delete("/api/projects/{project_id}", status_code=204)
+async def project_delete(project_id: str):
+    try:
+        delete_project(project_id)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return Response(status_code=204)
 
 
 @app.delete("/api/sessions/{session_id}", status_code=204)
