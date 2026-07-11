@@ -2,6 +2,7 @@ fastapi==0.139.0
 uvicorn[standard]==0.51.0
 pydantic==2.13.4
 python-dotenv==1.2.1
+python-multipart==0.0.20
 
 requests==2.32.5
 beautifulsoup4==4.14.3

@@ -1,5 +1,7 @@
 const STORAGE_KEY = "python-debug-assistant.sessions";
 const ACTIVE_SESSION_KEY = "python-debug-assistant.active-session";
+const ACTIVE_PROJECT_KEY = "python-debug-assistant.active-project";
+const ACTIVE_FILE_KEY = "python-debug-assistant.active-file";
 
 const TOOL_META = {
   python_docs_search: {
@@ -28,6 +30,9 @@ let sessions = [];
 let currentSessionId = null;
 let currentEventSource = null;
 let activeRequest = null;
+let projects = [];
+let currentProjectId = null;
+let currentFilePath = null;
 
 const chatListEl = document.getElementById("chat-list");
 const messagesEl = document.getElementById("messages");
@@ -44,6 +49,21 @@ const clearStepsBtn = document.getElementById("clear-steps-btn");
 const modelCallsEl = document.getElementById("model-calls");
 const toolCallsEl = document.getElementById("tool-calls");
 const totalCallsEl = document.getElementById("total-calls");
+
+const activityButtons = document.querySelectorAll(".activity-btn[data-sidebar-view]");
+const sideTitleEl = document.getElementById("side-title");
+const projectUploadEl = document.getElementById("project-upload");
+const uploadStatusEl = document.getElementById("upload-status");
+const projectPickerEl = document.getElementById("project-picker");
+const projectFileCountEl = document.getElementById("project-file-count");
+const fileTreeEl = document.getElementById("file-tree");
+const editorProjectNameEl = document.getElementById("editor-project-name");
+const editorLanguageEl = document.getElementById("editor-language");
+const editorTabsEl = document.getElementById("editor-tabs");
+const editorEmptyEl = document.getElementById("editor-empty");
+const codeViewEl = document.getElementById("code-view");
+const editorFileStatusEl = document.getElementById("editor-file-status");
+const editorLineStatusEl = document.getElementById("editor-line-status");
 
 function nowText() {
   return new Date().toLocaleString("ko-KR", {
@@ -169,9 +189,16 @@ function renderChatList() {
     item.innerHTML = `
       <div class="chat-item-title">${escapeHtml(session.title)}</div>
       <div class="chat-item-meta">${escapeHtml(nowTextFromIso(session.updatedAt))}</div>
+      <button class="chat-delete" type="button" aria-label="${escapeHtml(session.title)} 대화 삭제" title="대화 삭제">×</button>
     `;
 
     item.onclick = () => selectSession(session.id);
+
+    const deleteButton = item.querySelector(".chat-delete");
+    deleteButton.onclick = (event) => {
+      event.stopPropagation();
+      deleteConversation(session.id);
+    };
 
     chatListEl.appendChild(item);
   });
@@ -203,8 +230,8 @@ function renderMessages() {
   if (session.messages.length === 0) {
     messagesEl.innerHTML = `
       <div class="empty-state">
-        <h3>Python Debug Assistant</h3>
-        <p>Python 에러 로그, 문법 질문, 공식 문서 기반 검색을 요청해보세요.</p>
+        <h3>디버깅을 시작해볼까요?</h3>
+        <p>오류 로그를 붙여 넣거나, 현재 코드에서 이해되지 않는 부분을 질문해보세요.</p>
       </div>
     `;
     return;
@@ -243,6 +270,47 @@ function appendMessageToSession(sessionId, role, content) {
 
     appendMessageToDOM(role, content);
     scrollMessagesToBottom();
+  }
+}
+
+async function deleteConversation(sessionId) {
+  const session = getSession(sessionId);
+  if (!session) return;
+
+  if (activeRequest?.sessionId === sessionId) {
+    window.alert("답변 생성이 끝난 후 대화를 삭제해 주세요.");
+    return;
+  }
+
+  if (!window.confirm(`“${session.title}” 대화를 삭제할까요?`)) return;
+
+  try {
+    const response = await fetch(`/api/sessions/${encodeURIComponent(sessionId)}`, {
+      method: "DELETE",
+    });
+
+    if (!response.ok) {
+      throw new Error("대화 삭제 요청이 실패했습니다.");
+    }
+
+    sessions = sessions.filter((item) => item.id !== sessionId);
+
+    if (currentSessionId === sessionId) {
+      currentSessionId = sessions[0]?.id || null;
+    }
+
+    if (sessions.length === 0) {
+      createSession();
+      return;
+    }
+
+    saveSessions();
+    renderChatList();
+    renderMessages();
+    clearSteps();
+  } catch (error) {
+    console.error(error);
+    window.alert("대화를 삭제하지 못했습니다. 잠시 후 다시 시도해 주세요.");
   }
 }
 
@@ -347,6 +415,251 @@ function setRunning(isRunning) {
   inputEl.disabled = isRunning;
   agentStatusEl.textContent = isRunning ? "실행 중..." : "대기 중";
   sendBtn.textContent = isRunning ? "실행 중" : "전송";
+}
+
+function setSidebarView(view) {
+  document.querySelectorAll(".sidebar-view").forEach((element) => {
+    element.classList.toggle("active", element.id === `${view}-sidebar-view`);
+  });
+
+  activityButtons.forEach((button) => {
+    button.classList.toggle("active", button.dataset.sidebarView === view);
+  });
+
+  sideTitleEl.textContent = view === "files" ? "탐색기" : "대화 기록";
+}
+
+function setUploadStatus(message, type = "") {
+  uploadStatusEl.textContent = message;
+  uploadStatusEl.className = type;
+}
+
+function countTreeFiles(nodes) {
+  return nodes.reduce(
+    (count, node) => count + (node.type === "file" ? 1 : countTreeFiles(node.children || [])),
+    0,
+  );
+}
+
+function findFirstFile(nodes) {
+  for (const node of nodes) {
+    if (node.type === "file") return node;
+    const child = findFirstFile(node.children || []);
+    if (child) return child;
+  }
+  return null;
+}
+
+function treeHasFile(nodes, path) {
+  return nodes.some(
+    (node) =>
+      (node.type === "file" && node.path === path) ||
+      (node.type === "directory" && treeHasFile(node.children || [], path)),
+  );
+}
+
+function renderProjectPicker() {
+  projectPickerEl.innerHTML = "";
+
+  if (projects.length === 0) {
+    const option = document.createElement("option");
+    option.value = "";
+    option.textContent = "업로드된 프로젝트 없음";
+    projectPickerEl.appendChild(option);
+    projectPickerEl.disabled = true;
+    return;
+  }
+
+  projectPickerEl.disabled = false;
+  projects.forEach((project) => {
+    const option = document.createElement("option");
+    option.value = project.id;
+    option.textContent = `${project.name} (${project.file_count})`;
+    option.selected = project.id === currentProjectId;
+    projectPickerEl.appendChild(option);
+  });
+}
+
+function renderFileTree(nodes) {
+  fileTreeEl.innerHTML = "";
+  const fragment = document.createDocumentFragment();
+
+  function appendNodes(items, parent, depth) {
+    items.forEach((node) => {
+      if (node.type === "directory") {
+        const wrapper = document.createElement("div");
+        const button = document.createElement("button");
+        const children = document.createElement("div");
+
+        button.type = "button";
+        button.className = "tree-node";
+        button.style.paddingLeft = `${8 + depth * 14}px`;
+        button.innerHTML = `<span class="tree-icon">⌄</span><span>${escapeHtml(node.name)}</span>`;
+        children.className = "tree-children";
+
+        button.onclick = () => {
+          const collapsed = children.classList.toggle("collapsed");
+          button.querySelector(".tree-icon").textContent = collapsed ? "›" : "⌄";
+        };
+
+        wrapper.appendChild(button);
+        appendNodes(node.children || [], children, depth + 1);
+        wrapper.appendChild(children);
+        parent.appendChild(wrapper);
+        return;
+      }
+
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = `tree-node ${node.path === currentFilePath ? "active" : ""}`;
+      button.dataset.filePath = node.path;
+      button.style.paddingLeft = `${8 + depth * 14}px`;
+      button.innerHTML = `<span class="tree-icon">◇</span><span>${escapeHtml(node.name)}</span>`;
+      button.onclick = () => openProjectFile(node.path);
+      parent.appendChild(button);
+    });
+  }
+
+  appendNodes(nodes, fragment, 0);
+  fileTreeEl.appendChild(fragment);
+}
+
+function renderCodeFile(file) {
+  editorEmptyEl.hidden = true;
+  codeViewEl.hidden = false;
+  codeViewEl.innerHTML = "";
+
+  const lines = file.content.replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n");
+  const fragment = document.createDocumentFragment();
+
+  lines.forEach((line, index) => {
+    const row = document.createElement("div");
+    const number = document.createElement("span");
+    const content = document.createElement("span");
+
+    row.className = "code-line";
+    row.dataset.line = String(index + 1);
+    number.className = "line-number";
+    number.textContent = String(index + 1);
+    content.className = "line-content";
+    content.textContent = line || " ";
+
+    row.append(number, content);
+    fragment.appendChild(row);
+  });
+
+  codeViewEl.appendChild(fragment);
+  editorTabsEl.innerHTML = `<div class="editor-tab">${escapeHtml(file.name)}</div>`;
+  editorLanguageEl.textContent = file.language.toUpperCase();
+  editorFileStatusEl.textContent = `${file.path} · ${file.line_count} lines`;
+  editorLineStatusEl.textContent = "Ln 1, Col 1";
+}
+
+async function openProjectFile(path) {
+  if (!currentProjectId || !path) return;
+
+  try {
+    editorFileStatusEl.textContent = "파일을 여는 중...";
+    const response = await fetch(
+      `/api/projects/${encodeURIComponent(currentProjectId)}/file?path=${encodeURIComponent(path)}`,
+    );
+
+    if (!response.ok) throw new Error("파일을 불러오지 못했습니다.");
+
+    const file = await response.json();
+    currentFilePath = file.path;
+    localStorage.setItem(ACTIVE_FILE_KEY, currentFilePath);
+    renderCodeFile(file);
+
+    document.querySelectorAll(".tree-node[data-file-path]").forEach((button) => {
+      button.classList.toggle("active", button.dataset.filePath === currentFilePath);
+    });
+  } catch (error) {
+    console.error(error);
+    editorFileStatusEl.textContent = "파일 열기 실패";
+  }
+}
+
+async function loadProject(projectId, preferredFile = null) {
+  if (!projectId) return;
+
+  try {
+    const response = await fetch(`/api/projects/${encodeURIComponent(projectId)}`);
+    if (!response.ok) throw new Error("프로젝트를 불러오지 못했습니다.");
+
+    const data = await response.json();
+    currentProjectId = data.project.id;
+    localStorage.setItem(ACTIVE_PROJECT_KEY, currentProjectId);
+    editorProjectNameEl.textContent = data.project.name;
+    projectFileCountEl.textContent = String(countTreeFiles(data.tree));
+    renderProjectPicker();
+    renderFileTree(data.tree);
+
+    const firstFile = findFirstFile(data.tree);
+    const fileToOpen = preferredFile && treeHasFile(data.tree, preferredFile)
+      ? preferredFile
+      : firstFile?.path;
+    if (fileToOpen) await openProjectFile(fileToOpen);
+  } catch (error) {
+    console.error(error);
+    setUploadStatus("프로젝트를 불러오지 못했습니다.", "error");
+  }
+}
+
+async function loadProjects() {
+  try {
+    const response = await fetch("/api/projects");
+    if (!response.ok) throw new Error("프로젝트 목록을 불러오지 못했습니다.");
+
+    const data = await response.json();
+    projects = data.projects || [];
+    const storedProjectId = localStorage.getItem(ACTIVE_PROJECT_KEY);
+    currentProjectId = projects.some((project) => project.id === storedProjectId)
+      ? storedProjectId
+      : projects[0]?.id || null;
+    renderProjectPicker();
+
+    if (currentProjectId) {
+      await loadProject(currentProjectId, localStorage.getItem(ACTIVE_FILE_KEY));
+    }
+  } catch (error) {
+    console.error(error);
+    setUploadStatus("프로젝트 목록을 불러오지 못했습니다.", "error");
+  }
+}
+
+async function uploadProject(file) {
+  if (!file) return;
+
+  const formData = new FormData();
+  formData.append("file", file);
+  setUploadStatus("프로젝트를 업로드하고 있습니다...");
+  projectUploadEl.disabled = true;
+
+  try {
+    const response = await fetch("/api/projects", {
+      method: "POST",
+      body: formData,
+    });
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.detail || data.message || "프로젝트 업로드에 실패했습니다.");
+    }
+
+    setUploadStatus(`${data.project.file_count}개 파일을 불러왔습니다.`, "success");
+    currentProjectId = data.project.id;
+    currentFilePath = null;
+    localStorage.setItem(ACTIVE_PROJECT_KEY, currentProjectId);
+    localStorage.removeItem(ACTIVE_FILE_KEY);
+    await loadProjects();
+  } catch (error) {
+    console.error(error);
+    setUploadStatus(error.message, "error");
+  } finally {
+    projectUploadEl.disabled = false;
+    projectUploadEl.value = "";
+  }
 }
 
 function finishRequest(requestState) {
@@ -516,6 +829,22 @@ clearStepsBtn.addEventListener("click", () => {
   clearSteps();
 });
 
+activityButtons.forEach((button) => {
+  button.addEventListener("click", () => {
+    setSidebarView(button.dataset.sidebarView);
+  });
+});
+
+projectUploadEl.addEventListener("change", () => {
+  uploadProject(projectUploadEl.files?.[0]);
+});
+
+projectPickerEl.addEventListener("change", () => {
+  currentFilePath = null;
+  localStorage.removeItem(ACTIVE_FILE_KEY);
+  loadProject(projectPickerEl.value);
+});
+
 document.querySelectorAll(".quick-btn").forEach((btn) => {
   btn.addEventListener("click", () => {
     inputEl.value = btn.textContent.trim();
@@ -524,3 +853,4 @@ document.querySelectorAll(".quick-btn").forEach((btn) => {
 });
 
 loadSessions();
+loadProjects();

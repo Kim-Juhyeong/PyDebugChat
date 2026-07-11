@@ -38,6 +38,10 @@ MAX_MODEL_CALLS = int(os.getenv("MAX_MODEL_CALLS", "3"))
 MAX_TOOL_CALLS = int(os.getenv("MAX_TOOL_CALLS", "5"))
 MAX_TOTAL_CALLS = int(os.getenv("MAX_TOTAL_CALLS", "8"))
 MAX_GRAPH_STEPS = int(os.getenv("MAX_GRAPH_STEPS", "12"))
+MAX_UPLOAD_BYTES = int(os.getenv("MAX_UPLOAD_BYTES", str(10 * 1024 * 1024)))
+MAX_PROJECT_FILES = int(os.getenv("MAX_PROJECT_FILES", "200"))
+MAX_PROJECT_BYTES = int(os.getenv("MAX_PROJECT_BYTES", str(20 * 1024 * 1024)))
+MAX_FILE_BYTES = int(os.getenv("MAX_FILE_BYTES", str(2 * 1024 * 1024)))
 
 
 def ensure_data_directories() -> None:

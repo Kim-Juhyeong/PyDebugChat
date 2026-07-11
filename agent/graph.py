@@ -360,3 +360,9 @@ async def get_graph():
     )
 
     return _runtime_graph
+
+
+async def delete_thread(thread_id: str) -> None:
+    """Delete all persisted checkpoints for one conversation thread."""
+    await get_graph()
+    await _async_checkpointer.adelete_thread(thread_id)

@@ -5,8 +5,8 @@ import uuid
 import json
 
 from pathlib import Path
-from fastapi import FastAPI, Request, HTTPException, Query
-from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
+from fastapi import FastAPI, Request, HTTPException, Query, UploadFile, File
+from fastapi.responses import FileResponse, HTMLResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -18,8 +18,16 @@ except Exception:
     class GraphRecursionError(Exception):
         pass
 
-from agent.graph import get_graph
-from app.config import MAX_GRAPH_STEPS, MAX_MODEL_CALLS, MAX_TOOL_CALLS, MAX_TOTAL_CALLS
+from agent.graph import delete_thread, get_graph
+from app.config import MAX_GRAPH_STEPS, MAX_MODEL_CALLS, MAX_TOOL_CALLS, MAX_TOTAL_CALLS, MAX_UPLOAD_BYTES
+from app.projects import (
+    ProjectArchiveError,
+    create_project_from_zip,
+    get_project,
+    get_project_tree,
+    list_projects,
+    read_project_file,
+)
 from app.schemas import ChatRequest, ChatResponse, SanitizationInfo, UsageInfo
 from app.middleware import ChatSafetyMiddleware, CallLimitCallbackHandler, CallLimitExceeded, sanitize_text, logger
 
@@ -465,3 +473,50 @@ async def agent_stream(
             "X-Accel-Buffering": "no",
         },
     )
+
+
+@app.get("/api/projects")
+async def projects_list():
+    return {"projects": list_projects()}
+
+
+@app.post("/api/projects", status_code=201)
+async def projects_upload(file: UploadFile = File(...)):
+    filename = file.filename or "project.zip"
+    payload = await file.read(MAX_UPLOAD_BYTES + 1)
+    await file.close()
+
+    try:
+        project = create_project_from_zip(filename, payload)
+    except ProjectArchiveError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    return {
+        "project": project,
+        "tree": get_project_tree(project["id"]),
+    }
+
+
+@app.get("/api/projects/{project_id}")
+async def project_detail(project_id: str):
+    try:
+        return {
+            "project": get_project(project_id),
+            "tree": get_project_tree(project_id),
+        }
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@app.get("/api/projects/{project_id}/file")
+async def project_file(project_id: str, path: str = Query(..., min_length=1, max_length=1000)):
+    try:
+        return read_project_file(project_id, path)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@app.delete("/api/sessions/{session_id}", status_code=204)
+async def session_delete(session_id: str):
+    await delete_thread(session_id)
+    return Response(status_code=204)

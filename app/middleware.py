@@ -13,7 +13,7 @@ from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 from langchain_core.callbacks import BaseCallbackHandler
 
-from app.config import LOG_DIR, MAX_REQUEST_BYTES
+from app.config import LOG_DIR, MAX_REQUEST_BYTES, MAX_UPLOAD_BYTES
 
 
 # 환경변수
@@ -320,12 +320,18 @@ class ChatSafetyMiddleware(BaseHTTPMiddleware):
         try:
             content_length = int(request.headers.get("content-length", "0"))
 
-            if content_length > MAX_REQUEST_BYTES:
+            request_limit = (
+                MAX_UPLOAD_BYTES + 1024 * 1024
+                if request.url.path == "/api/projects" and request.method.upper() == "POST"
+                else MAX_REQUEST_BYTES
+            )
+
+            if content_length > request_limit:
                 return JSONResponse(
                     status_code=413,
                     content={
                         "error_type": "RequestTooLarge",
-                        "message": f"요청 크기가 너무 큽니다. 최대 {MAX_REQUEST_BYTES} bytes까지 허용됩니다.",
+                        "message": f"요청 크기가 너무 큽니다. 최대 {request_limit} bytes까지 허용됩니다.",
                     },
                 )
 
